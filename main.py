@@ -7,7 +7,9 @@ import argparse
 
 
 
-def collect_data(root_path , input_shape, train_val_split, seed):
+def collect_data(root_path , input_shape, train_val_split, seed): 
+    
+    #QUI E' DOVE ANDRA' IL CODICE PER IL NOSTRO DATALOADER
 
     os.environ["PYTHONHASHSEED"] = str(seed)
 
@@ -124,13 +126,13 @@ def train_model(test_name, train_bool,
 
                 torch.save(model.state_dict(), save_path + 'best_valLoss_model.pth')
                 best_val_loss = val_loss
-                print('Best val_loss at epoch',epoch," with acc: ",val_loss)
+                print('Saving best val_loss model at epoch',epoch," with loss: ",val_loss)
 
             if val_acc > best_val_acc:
 
                 torch.save(model.state_dict(), save_path + 'best_valAcc_model.pth')
                 best_val_acc = val_acc
-                print('Best val_acc at epoch: ',epoch," with acc: ",val_acc)
+                print('Saving best val_acc model at epoch: ',epoch," with acc: ",val_acc)
 
     
 
@@ -151,7 +153,7 @@ def train_model(test_name, train_bool,
     ret_str ="loss_train: " + str(ret_dict["losses"]["loss_train"][-1:])
     ret_str +="\n\nloss_eval: " + str(ret_dict["losses"]["loss_eval"][-1:]) 
     ret_str +="\n\nloss_test: " + str(ret_dict["losses"]["loss_test"][-1:]) 
-    ret_str +="\n\nlacc_train " + str(ret_dict["acc"]["acc_train"][-1:])
+    ret_str +="\n\nacc_train " + str(ret_dict["acc"]["acc_train"][-1:])
     ret_str +="\n\nacc_eval: " + str(ret_dict["acc"]["acc_eval"][-1:]) 
     ret_str +="\n\nacc_test: " + str(ret_dict["acc"]["acc_test"][-1:]) 
 
@@ -193,7 +195,7 @@ def main():
 
     train_val_split = 0.1
     lr = 1e-5
-    epoch = 5
+    epoch = 100
     debug = debug
     
     # Collect data
@@ -205,7 +207,6 @@ def main():
 
     train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, root_path, debug)
 
-    
 
 
 if __name__ == '__main__':

@@ -128,7 +128,10 @@ def save_plot_loss_or_acc(info_dict, path, test_name):
 
 
     for i in info_dict.keys():
-        plt.plot(info_dict[i], '-x', label=i)
+        if i == "acc_test" or i == "loss_test":
+            plt.plot(np.arange(len(info_dict["loss_train"])) , info_dict[i], '-x', label=i)   #per posizionare il test in fondo 
+        else:
+            plt.plot(info_dict[i], '-x', label=i)
 
     plt.legend()
     plt.xlabel('epoch')
