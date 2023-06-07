@@ -127,16 +127,18 @@ def save_plot_loss_or_acc(info_dict, path, test_name):
     """
 
 
-    for i in info_dict.keys():
-        if i == "acc_test" or i == "loss_test":
-            plt.plot(np.arange(len(info_dict["loss_train"])) , info_dict[i], '-x', label=i)   #per posizionare il test in fondo 
-        else:
-            plt.plot(info_dict[i], '-x', label=i)
+    for k in list(info_dict.keys()):
+        #if k == "acc_test" or k == "loss_test":
+        #    plt.plot(np.arange(len(info_dict[acc_or_loss]["loss_train"])) , info_dict[acc_or_loss][k], '-x', label=k)   #per posizionare il test in fondo 
+        #else:
+        print(info_dict[k])
+        plt.plot(info_dict[k], '-x', label=k)
 
+                
     plt.legend()
     plt.xlabel('epoch')
     plt.ylabel('loss')
-    plt.title('Accuracy vs. No. of epochs')
+    plt.title(  str(list(info_dict.keys())[0]).split("_")[0] + " vs. No. of epochs" )
 
     if not os.path.exists(path):
         os.makedirs(path)

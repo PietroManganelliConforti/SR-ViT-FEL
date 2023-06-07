@@ -109,8 +109,9 @@ def train_model(test_name, train_bool,
                 acc = torch.tensor(torch.sum(preds == labels).item() / len(preds))
                 train_acc += acc.item()
 
+
             ret_dict["losses"]["loss_train"].append(train_loss) 
-            ret_dict["acc"]["acc_train"].append(train_acc) 
+            ret_dict["acc"]["acc_train"].append(train_acc/len(train_loader)) 
 
             # Validation phase
             model.eval()
@@ -122,17 +123,22 @@ def train_model(test_name, train_bool,
                 ret_dict["losses"]["loss_eval"].append(val_loss) 
                 ret_dict["acc"]["acc_eval"].append(val_acc) 
 
-            if val_loss < best_val_loss:
+            if epoch > 49 and val_loss < best_val_loss:
 
                 torch.save(model.state_dict(), save_path + 'best_valLoss_model.pth')
                 best_val_loss = val_loss
                 print('Saving best val_loss model at epoch',epoch," with loss: ",val_loss)
 
-            if val_acc > best_val_acc:
+            if epoch > 49 and val_acc > best_val_acc:
 
                 torch.save(model.state_dict(), save_path + 'best_valAcc_model.pth')
                 best_val_acc = val_acc
                 print('Saving best val_acc model at epoch: ',epoch," with acc: ",val_acc)
+
+            if epoch % 50 == 0:
+
+                save_plot_loss_or_acc( ret_dict["losses"], path = save_path + "/loss/" , test_name = "loss" )
+                save_plot_loss_or_acc( ret_dict["acc"], path = save_path + "/acc/" , test_name = "acc" )
 
     
 
@@ -195,7 +201,7 @@ def main():
 
     train_val_split = 0.1
     lr = 1e-5
-    epoch = 100
+    epoch = 10000
     debug = debug
     
     # Collect data
