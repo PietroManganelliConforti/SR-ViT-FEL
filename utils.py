@@ -131,7 +131,7 @@ def save_plot_loss_or_acc(info_dict, path, test_name):
         #if k == "acc_test" or k == "loss_test":
         #    plt.plot(np.arange(len(info_dict[acc_or_loss]["loss_train"])) , info_dict[acc_or_loss][k], '-x', label=k)   #per posizionare il test in fondo 
         #else:
-        print(info_dict[k])
+        
         plt.plot(info_dict[k], '-x', label=k)
 
                 

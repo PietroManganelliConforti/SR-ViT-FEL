@@ -122,6 +122,8 @@ def train_model(test_name, train_bool,
 
                 ret_dict["losses"]["loss_eval"].append(val_loss) 
                 ret_dict["acc"]["acc_eval"].append(val_acc) 
+            
+            print("[EPOCH "+str(epoch)+"]","Val_loss: ", val_loss, "val_acc: ", val_acc)
 
             if epoch > 49 and val_loss < best_val_loss:
 
