@@ -1,4 +1,3 @@
-
 import os
 import torchvision
 import numpy as np
@@ -7,7 +6,7 @@ import argparse
 
 
 
-def collect_data_2D(env_path , input_shape, train_val_split, seed): 
+def collect_data_2D(data_path , input_shape, train_val_split, seed): 
     
     #QUI E' DOVE ANDRA' IL CODICE PER IL NOSTRO DATALOADER
 
@@ -20,12 +19,12 @@ def collect_data_2D(env_path , input_shape, train_val_split, seed):
 
     test_dataset = None #todo dataloader 2D
 
-    train_dataset = torchvision.datasets.FGVCAircraft(root=env_path, split='trainval', transform=torchvision.transforms.Compose([torchvision.transforms.Resize((input_shape[1], input_shape[2]), antialias=True),
+    train_dataset = torchvision.datasets.FGVCAircraft(root=data_path, split='trainval', transform=torchvision.transforms.Compose([torchvision.transforms.Resize((input_shape[1], input_shape[2]), antialias=True),
                                                                                                                                     torchvision.transforms.AutoAugment(),
                                                                                                                                     torchvision.transforms.ToTensor(),                                                                                                                                
                                                                                                                                     torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])]), download=True)
     
-    test_dataset = torchvision.datasets.FGVCAircraft(root=env_path, split='test', transform=torchvision.transforms.Compose([torchvision.transforms.Resize((input_shape[1], input_shape[2]), antialias=True),
+    test_dataset = torchvision.datasets.FGVCAircraft(root=data_path, split='test', transform=torchvision.transforms.Compose([torchvision.transforms.Resize((input_shape[1], input_shape[2]), antialias=True),
                                                                                                                                torchvision.transforms.ToTensor(),
                                                                                                                                torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])]), download=True)
     
@@ -43,7 +42,8 @@ def collect_data_2D(env_path , input_shape, train_val_split, seed):
 
 
 
-def collect_data_1D(env_path , input_shape, train_val_split, seed): 
+
+def collect_data_1D(data_path , input_shape, train_val_split, seed): 
 
     os.environ["PYTHONHASHSEED"] = str(seed)
 
@@ -51,9 +51,9 @@ def collect_data_1D(env_path , input_shape, train_val_split, seed):
 
     torch.cuda.manual_seed(seed)
 
-    train_dataset = None #todo dataloader 
+    train_dataset = None #todo dataloader 1D
 
-    test_dataset = None #todo dataloader                                                                               
+    test_dataset = None #todo dataloader 1D                                                                            
 
 
     print(f'Numero di classi: {len(train_dataset.classes)}, \nNumero di Training samples: {len(train_dataset)}, \nNumero di Test sample: {len(test_dataset)}')
@@ -63,11 +63,12 @@ def collect_data_1D(env_path , input_shape, train_val_split, seed):
     print(f'Ther are: {len(train_dataset)} training samples, {len(val_dataset)} validation samples and {len(test_dataset)} test samples')
 
     # create dataloaders
-    train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=2, shuffle=True, num_workers=1)
-    val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=2, shuffle=True, num_workers=1)
+    train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=1, shuffle=True, num_workers=1)
+    val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=True, num_workers=1)
     test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=1)
 
     return train_data_loader, val_data_loader, test_data_loader
+
 
 
 
@@ -82,10 +83,11 @@ def train_model(test_name, train_bool,
 
     # Path
 
-    if not os.path.exists(env_path + test_name + '/'):
-        os.makedirs(env_path + test_name + '/')
-
     save_path = env_path + test_name + '/'
+
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+
 
     # Hardware
     device = hardware_check()
@@ -237,11 +239,13 @@ def main():
     debug = debug
     
     # Collect data
-    env_path = "./data"
+    env_path = "./" #project/work on docker
+
+    data_path = "./data"
 
     trained_net_path = "dataTest_name/best_valLoss_model.pth"
 
-    train_data_loader, val_data_loader, test_data_loader = collect_data_2D(env_path=env_path, input_shape=input_shape, train_val_split=train_val_split, seed=seed)
+    train_data_loader, val_data_loader, test_data_loader = collect_data_2D(data_path=data_path, input_shape=input_shape, train_val_split=train_val_split, seed=seed)
 
     # Train model
 
