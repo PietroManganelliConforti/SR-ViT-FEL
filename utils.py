@@ -146,3 +146,21 @@ def save_plot_loss_or_acc(info_dict, path, test_name):
     plt.savefig(path+test_name+".png")
     plt.clf()
     plt.close()
+
+
+    
+
+def save_plots_and_report(ret_dict, save_path, test_name):
+
+    ret_str ="loss_train: " + str(ret_dict["losses"]["loss_train"][-1:])
+    ret_str +="\n\nloss_eval: " + str(ret_dict["losses"]["loss_eval"][-1:]) 
+    ret_str +="\n\nloss_test: " + str(ret_dict["losses"]["loss_test"][-1:]) 
+    ret_str +="\n\nacc_train " + str(ret_dict["acc"]["acc_train"][-1:])
+    ret_str +="\n\nacc_eval: " + str(ret_dict["acc"]["acc_eval"][-1:]) 
+    ret_str +="\n\nacc_test: " + str(ret_dict["acc"]["acc_test"][-1:]) 
+
+    with open(save_path+'RESULTS_'+ test_name +'.txt', 'w+') as f:
+        f.write(test_name + "\n\n"+ ret_str + '\n\nret dict:\n' + str(ret_dict))
+
+    save_plot_loss_or_acc( ret_dict["losses"], path = save_path + "/loss/" , test_name = "loss" )
+    save_plot_loss_or_acc( ret_dict["acc"], path = save_path + "/acc/" , test_name = "acc" )

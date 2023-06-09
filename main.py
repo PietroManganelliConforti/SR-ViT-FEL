@@ -7,7 +7,7 @@ import argparse
 
 
 
-def collect_data(root_path , input_shape, train_val_split, seed): 
+def collect_data_2D(env_path , input_shape, train_val_split, seed): 
     
     #QUI E' DOVE ANDRA' IL CODICE PER IL NOSTRO DATALOADER
 
@@ -16,12 +16,16 @@ def collect_data(root_path , input_shape, train_val_split, seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
 
-    train_dataset = torchvision.datasets.FGVCAircraft(root=root_path, split='trainval', transform=torchvision.transforms.Compose([torchvision.transforms.Resize((input_shape[1], input_shape[2]), antialias=True),
+    train_dataset = None #todo dataloader 2D
+
+    test_dataset = None #todo dataloader 2D
+
+    train_dataset = torchvision.datasets.FGVCAircraft(root=env_path, split='trainval', transform=torchvision.transforms.Compose([torchvision.transforms.Resize((input_shape[1], input_shape[2]), antialias=True),
                                                                                                                                     torchvision.transforms.AutoAugment(),
                                                                                                                                     torchvision.transforms.ToTensor(),                                                                                                                                
                                                                                                                                     torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])]), download=True)
     
-    test_dataset = torchvision.datasets.FGVCAircraft(root=root_path, split='test', transform=torchvision.transforms.Compose([torchvision.transforms.Resize((input_shape[1], input_shape[2]), antialias=True),
+    test_dataset = torchvision.datasets.FGVCAircraft(root=env_path, split='test', transform=torchvision.transforms.Compose([torchvision.transforms.Resize((input_shape[1], input_shape[2]), antialias=True),
                                                                                                                                torchvision.transforms.ToTensor(),
                                                                                                                                torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])]), download=True)
     
@@ -39,16 +43,44 @@ def collect_data(root_path , input_shape, train_val_split, seed):
 
 
 
+def collect_data_1D(env_path , input_shape, train_val_split, seed): 
+
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+    torch.manual_seed(seed)
+
+    torch.cuda.manual_seed(seed)
+
+    train_dataset = None #todo dataloader 
+
+    test_dataset = None #todo dataloader                                                                               
+
+
+    print(f'Numero di classi: {len(train_dataset.classes)}, \nNumero di Training samples: {len(train_dataset)}, \nNumero di Test sample: {len(test_dataset)}')
+
+    train_dataset, val_dataset = torch.utils.data.random_split(train_dataset, [len(train_dataset) - int(len(train_dataset)*train_val_split), int(len(train_dataset)*train_val_split)])
+  
+    print(f'Ther are: {len(train_dataset)} training samples, {len(val_dataset)} validation samples and {len(test_dataset)} test samples')
+
+    # create dataloaders
+    train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=2, shuffle=True, num_workers=1)
+    val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=2, shuffle=True, num_workers=1)
+    test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=1)
+
+    return train_data_loader, val_data_loader, test_data_loader
+
+
 
 def train_model(test_name, train_bool, 
                  lr, epochs, train_data_loader, 
                  val_data_loader, test_data_loader,
-                 root_path, save_path, debug = False):
+                 env_path, trained_net_path= "",
+                 debug = False):
 
     
     print('TRAIN_MODEL\n\n')
+
     # Path
-    env_path = root_path
 
     if not os.path.exists(env_path + test_name + '/'):
         os.makedirs(env_path + test_name + '/')
@@ -69,7 +101,10 @@ def train_model(test_name, train_bool,
 
     model = model.to(device)
 
-    #model_dict = torch.load(env_path + model_folder + 'best_valAcc_model.pth', map_location = torch.device(device))
+    if trained_net_path != "":
+        print("Loading model state dict from ", trained_net_path)
+        model.load_state_dict(torch.load(trained_net_path))
+        print("Loaded model state dict")
 
     # Data loader
     train_loader = DeviceDataLoader(train_data_loader, device)
@@ -110,7 +145,7 @@ def train_model(test_name, train_bool,
                 train_acc += acc.item()
 
 
-            ret_dict["losses"]["loss_train"].append(train_loss) 
+            ret_dict["losses"]["loss_train"].append(train_loss/len(train_loader)) 
             ret_dict["acc"]["acc_train"].append(train_acc/len(train_loader)) 
 
             # Validation phase
@@ -120,6 +155,8 @@ def train_model(test_name, train_bool,
 
                 val_loss, val_acc = evaluate_model(model, val_loader) 
 
+                print(val_loss)
+
                 ret_dict["losses"]["loss_eval"].append(val_loss) 
                 ret_dict["acc"]["acc_eval"].append(val_acc) 
             
@@ -128,20 +165,22 @@ def train_model(test_name, train_bool,
             if epoch > 49 and val_loss < best_val_loss:
 
                 torch.save(model.state_dict(), save_path + 'best_valLoss_model.pth')
+                torch.save(optimizer.state_dict(), save_path + 'state_dict_optimizer.op')
+                
                 best_val_loss = val_loss
                 print('Saving best val_loss model at epoch',epoch," with loss: ",val_loss)
 
             if epoch > 49 and val_acc > best_val_acc:
 
                 torch.save(model.state_dict(), save_path + 'best_valAcc_model.pth')
+                torch.save(optimizer.state_dict(), save_path + 'state_dict_optimizer.op')
+                
                 best_val_acc = val_acc
                 print('Saving best val_acc model at epoch: ',epoch," with acc: ",val_acc)
 
             if epoch % 50 == 0:
 
-                save_plot_loss_or_acc( ret_dict["losses"], path = save_path + "/loss/" , test_name = "loss" )
-                save_plot_loss_or_acc( ret_dict["acc"], path = save_path + "/acc/" , test_name = "acc" )
-
+                save_plots_and_report(ret_dict, save_path, test_name)
     
 
     print('\n#----------------------#\n#     Test pahse       #\n#----------------------#\n\n')
@@ -151,26 +190,17 @@ def train_model(test_name, train_bool,
     with torch.no_grad():
         test_loss, test_acc = evaluate_model(model, test_loader) 
 
-
     ret_dict["losses"]["loss_test"].append(test_loss) #a point
     ret_dict["acc"]["acc_test"].append(test_acc) #a point
+
+    print("[TEST] ","test_loss", test_loss, "test_acc", test_acc)
 
     
     print('\n#----------------------#\n#   Process Completed  #\n#----------------------#\n\n')
 
-    ret_str ="loss_train: " + str(ret_dict["losses"]["loss_train"][-1:])
-    ret_str +="\n\nloss_eval: " + str(ret_dict["losses"]["loss_eval"][-1:]) 
-    ret_str +="\n\nloss_test: " + str(ret_dict["losses"]["loss_test"][-1:]) 
-    ret_str +="\n\nacc_train " + str(ret_dict["acc"]["acc_train"][-1:])
-    ret_str +="\n\nacc_eval: " + str(ret_dict["acc"]["acc_eval"][-1:]) 
-    ret_str +="\n\nacc_test: " + str(ret_dict["acc"]["acc_test"][-1:]) 
 
-    with open(save_path+'RESULTS_'+ test_name +'.txt', 'w+') as f:
-        f.write(test_name 
-        + "\n\n"+ ret_str + '\n\nret dict:\n' + str(ret_dict))
+    save_plots_and_report(ret_dict, save_path, test_name)
 
-    save_plot_loss_or_acc( ret_dict["losses"], path = save_path + "/loss/" , test_name = "loss" )
-    save_plot_loss_or_acc( ret_dict["acc"], path = save_path + "/acc/" , test_name = "acc" )
 
 
 
@@ -189,7 +219,7 @@ def main():
  
     print("GPU IN USO: ", args.gpu)
 
-    test_name = 'Test_name'
+    test_name = 'Test_name2'
 
     # Seed
     seed = 0
@@ -203,17 +233,19 @@ def main():
 
     train_val_split = 0.1
     lr = 1e-5
-    epoch = 10000
+    epoch = 100
     debug = debug
     
     # Collect data
-    root_path = "./data"
+    env_path = "./data"
 
-    train_data_loader, val_data_loader, test_data_loader = collect_data(root_path=root_path, input_shape=input_shape, train_val_split=train_val_split, seed=seed)
+    trained_net_path = "dataTest_name/best_valLoss_model.pth"
+
+    train_data_loader, val_data_loader, test_data_loader = collect_data_2D(env_path=env_path, input_shape=input_shape, train_val_split=train_val_split, seed=seed)
 
     # Train model
 
-    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, root_path, debug)
+    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, env_path, trained_net_path, debug)
 
 
 
