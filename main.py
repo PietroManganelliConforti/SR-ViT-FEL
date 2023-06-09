@@ -6,14 +6,7 @@ import argparse
 
 
 
-def collect_data_2D(data_path , input_shape, train_val_split, seed): 
-    
-    #QUI E' DOVE ANDRA' IL CODICE PER IL NOSTRO DATALOADER
-
-    os.environ["PYTHONHASHSEED"] = str(seed)
-
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
+def collect_data_2D(data_path , input_shape, train_val_split): 
 
     train_dataset = None #todo dataloader 2D
 
@@ -44,12 +37,6 @@ def collect_data_2D(data_path , input_shape, train_val_split, seed):
 
 
 def collect_data_1D(data_path , input_shape, train_val_split, seed): 
-
-    os.environ["PYTHONHASHSEED"] = str(seed)
-
-    torch.manual_seed(seed)
-
-    torch.cuda.manual_seed(seed)
 
     train_dataset = None #todo dataloader 1D
 
@@ -221,12 +208,20 @@ def main():
  
     print("GPU IN USO: ", args.gpu)
 
-    test_name = 'Test_name2'
+    # Seed #
 
-    # Seed
     seed = 0
 
-    # Globals
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+    torch.manual_seed(seed)
+
+    torch.cuda.manual_seed(seed)
+
+    ####### ARGS
+
+    test_name = 'Test_name3'
+
     train_bool = not args.do_test
 
     print("train_bool",train_bool)
@@ -234,22 +229,25 @@ def main():
     input_shape = (3, 362, 512)
 
     train_val_split = 0.1
+
     lr = 1e-5
+
     epoch = 100
+
     debug = debug
     
-    # Collect data
     env_path = "./" #project/work on docker
 
     data_path = "./data"
 
-    trained_net_path = "dataTest_name/best_valLoss_model.pth"
+    trained_net_path = ""
 
-    train_data_loader, val_data_loader, test_data_loader = collect_data_2D(data_path=data_path, input_shape=input_shape, train_val_split=train_val_split, seed=seed)
+    train_data_loader, val_data_loader, test_data_loader = collect_data_2D(data_path=data_path, input_shape=input_shape, train_val_split=train_val_split)
 
     # Train model
 
     train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, env_path, trained_net_path, debug)
+
 
 
 
