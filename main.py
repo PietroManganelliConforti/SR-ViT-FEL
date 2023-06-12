@@ -3,7 +3,7 @@ import torchvision
 import numpy as np
 from utils import *
 import argparse
-
+import pandas as pd
 
 
 def collect_data_2D(data_path , input_shape, train_val_split): 
@@ -32,6 +32,55 @@ def collect_data_2D(data_path , input_shape, train_val_split):
     test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=1)
 
     return train_data_loader, val_data_loader, test_data_loader
+
+
+'''
+Dataset_1D returns input and output as dictionaries of variables
+
+For example:
+{'input': {'PT08.S1(CO)': 1360.0, 'NMHC(GT)': 150.0, 'C6H6(GT)': 11.9, 'PT08.S2(NMHC)': 1046.0, 'NOx(GT)': 166.0, 'PT08.S3(NOx)': 1056.0, 'NO2(GT)': 113.0, 'PT08.S4(NO2)': 1692.0, 'PT08.S5(O3)': 1268.0, 'T': 13.6, 'RH': 48.9, 'AH': 0.7578, 'Unnamed: 15': nan, 'Unnamed: 16': nan}, 
+'output': {'CO(GT)': 2.6}}
+'''
+
+class Dataset_1D(torch.utils.data.Dataset):
+    def __init__(self, csv_file, split, output_variables_names):
+
+        df = pd.read_csv(csv_file, sep=';')
+
+        input_variables, output_variables = {}, {}
+        classes = []
+        for column in df.columns:
+            if (column not in output_variables_names):
+                if (column != 'Date' and column != 'Time'):
+                    input_variables[column] = [float(str(elem).replace(',','.')) for elem in df[column].tolist()]
+            else:
+                output_variables[column] = [float(str(elem).replace(',','.')) for elem in df[column].tolist()]  
+                classes.append(column)
+        
+        self.input = input_variables # dictionary of lists of values
+        self.output = output_variables # dictionary of list of values 
+        self.classes = classes
+        self.num_samples = len(self.output[output_variables_names[0]])
+        
+    def __len__(self):
+        return self.num_samples    
+        
+    def __getitem__(self, idx):
+
+
+        input_dict = {}
+        for key in self.input.keys():
+            input_dict[key] = self.input[key][idx]
+
+        output_dict = {}
+        for key in self.output.keys():
+            output_dict[key] = self.output[key][idx]
+
+        
+        item = {'input': input_dict,
+                'output': output_dict}
+
+        return item
 
 
 
@@ -248,9 +297,12 @@ def main():
 
     train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, env_path, trained_net_path, debug)
 
-
-
-
+    '''
+    output_variables_names = ['CO(GT)']
+    var = Dataset_1D(csv_file="AirQuality.csv", split='trainval', output_variables_names=output_variables_names)
+    print (var.__getitem__(0))
+    '''
 if __name__ == '__main__':
+    
     main()
 
