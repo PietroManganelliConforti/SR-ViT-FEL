@@ -43,12 +43,15 @@ For example:
 '''
 
 class Dataset_1D(torch.utils.data.Dataset):
-    def __init__(self, csv_file, split, output_variables_names):
+    def __init__(self, csv_file, output_variables_names):
 
         df = pd.read_csv(csv_file, sep=';')
 
+        df = df.drop(['Unnamed: 15','Unnamed: 16'], axis = 1, inplace = True)[0:9357]  # Unamed sono Nan, e da 9358 in poi sono NaN
+
         input_variables, output_variables = {}, {}
         classes = []
+
         for column in df.columns:
             if (column not in output_variables_names):
                 if (column != 'Date' and column != 'Time'):
@@ -60,13 +63,12 @@ class Dataset_1D(torch.utils.data.Dataset):
         self.input = input_variables # dictionary of lists of values
         self.output = output_variables # dictionary of list of values 
         self.classes = classes
-        self.num_samples = len(self.output[output_variables_names[0]])
+        self.num_samples = len(df) #len(self.output[output_variables_names[0]])
         
     def __len__(self):
         return self.num_samples    
         
     def __getitem__(self, idx):
-
 
         input_dict = {}
         for key in self.input.keys():
@@ -85,11 +87,11 @@ class Dataset_1D(torch.utils.data.Dataset):
 
 
 
-def collect_data_1D(data_path , input_shape, train_val_split, seed): 
+def collect_data_1D(data_path , input_shape, train_val_split): 
 
-    train_dataset = None #todo dataloader 1D
+    train_dataset = None #todo dataset x dataloader 1D
 
-    test_dataset = None #todo dataloader 1D                                                                            
+    test_dataset = None #todo dataset x dataloader 1D                                                                            
 
 
     print(f'Numero di classi: {len(train_dataset.classes)}, \nNumero di Training samples: {len(train_dataset)}, \nNumero di Test sample: {len(test_dataset)}')

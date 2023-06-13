@@ -1,4 +1,3 @@
-
 import numpy as np
 import matplotlib.pyplot as plt
 from ssqueezepy import ssq_cwt, ssq_stft
@@ -34,6 +33,7 @@ Tsx, Sx, *_ = ssq_stft(x)
 viz(x, np.flipud(Tsx), np.flipud(Sx))
 
 from ssqueezepy import Wavelet, cwt, stft, imshow
+
 fs = 400
 t = np.linspace(0, N/fs, N)
 wavelet = Wavelet()
