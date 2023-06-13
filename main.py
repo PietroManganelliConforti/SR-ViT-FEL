@@ -47,7 +47,9 @@ class Dataset_1D(torch.utils.data.Dataset):
 
         df = pd.read_csv(csv_file, sep=';')
 
-        df = df.drop(['Unnamed: 15','Unnamed: 16'], axis = 1, inplace = True)[0:9357]  # Unamed sono Nan, e da 9358 in poi sono NaN
+        df.drop(['Unnamed: 15','Unnamed: 16'], axis = 1, inplace = True) # Unamed sono Nan, e da 9358 in poi sono NaN
+        df = df[0:9357]
+        
 
         input_variables, output_variables = {}, {}
         classes = []
@@ -268,7 +270,7 @@ def main():
     torch.manual_seed(seed)
 
     torch.cuda.manual_seed(seed)
-
+    '''
     ####### ARGS
 
     test_name = 'Test_name3'
@@ -298,12 +300,12 @@ def main():
     # Train model
 
     train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, env_path, trained_net_path, debug)
-
     '''
+    
     output_variables_names = ['CO(GT)']
-    var = Dataset_1D(csv_file="AirQuality.csv", split='trainval', output_variables_names=output_variables_names)
+    var = Dataset_1D(csv_file="AirQuality.csv", output_variables_names=output_variables_names)
     print (var.__getitem__(0))
-    '''
+    
 if __name__ == '__main__':
     
     main()
