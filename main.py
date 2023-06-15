@@ -43,7 +43,7 @@ For example:
 '''
 
 class Dataset_1D(torch.utils.data.Dataset):
-    def __init__(self, csv_file, output_variables_names):
+    def __init__(self, csv_file, output_variables_names, window_size):
 
         df = pd.read_csv(csv_file, sep=';')
 
@@ -53,19 +53,28 @@ class Dataset_1D(torch.utils.data.Dataset):
 
         input_variables, output_variables = {}, {}
         classes = []
-
         for column in df.columns:
             if (column not in output_variables_names):
                 if (column != 'Date' and column != 'Time'):
                     input_variables[column] = [float(str(elem).replace(',','.')) for elem in df[column].tolist()]
+                    input_variables[column] = self.create_windows(input_variables[column], window_size)
             else:
                 output_variables[column] = [float(str(elem).replace(',','.')) for elem in df[column].tolist()]  
+                output_variables[column] = self.create_windows(output_variables[column], window_size)
+
                 classes.append(column)
         
         self.input = input_variables # dictionary of lists of values
         self.output = output_variables # dictionary of list of values 
         self.classes = classes
-        self.num_samples = len(df) #len(self.output[output_variables_names[0]])
+        self.num_samples = len(df) 
+        self.window_size = window_size
+
+    def create_windows (self, list_of_values, window_size):
+        windows = []
+        for i in range(0, len(list_of_values), window_size):
+            windows.append(list_of_values[i:i+window_size])
+        return windows
         
     def __len__(self):
         return self.num_samples    
@@ -303,7 +312,8 @@ def main():
     '''
     
     output_variables_names = ['CO(GT)']
-    var = Dataset_1D(csv_file="AirQuality.csv", output_variables_names=output_variables_names)
+    window_size = 10
+    var = Dataset_1D(csv_file="AirQuality.csv", output_variables_names=output_variables_names, window_size=window_size)
     print (var.__getitem__(0))
     
 if __name__ == '__main__':
