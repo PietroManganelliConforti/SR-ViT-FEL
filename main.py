@@ -38,8 +38,8 @@ def collect_data_2D(data_path , input_shape, train_val_split):
 Dataset_1D returns input and output as dictionaries of variables
 
 For example:
-{'input': {'PT08.S1(CO)': 1360.0, 'NMHC(GT)': 150.0, 'C6H6(GT)': 11.9, 'PT08.S2(NMHC)': 1046.0, 'NOx(GT)': 166.0, 'PT08.S3(NOx)': 1056.0, 'NO2(GT)': 113.0, 'PT08.S4(NO2)': 1692.0, 'PT08.S5(O3)': 1268.0, 'T': 13.6, 'RH': 48.9, 'AH': 0.7578, 'Unnamed: 15': nan, 'Unnamed: 16': nan}, 
-'output': {'CO(GT)': 2.6}}
+{'input': {'PT08.S1(CO)': [1360.0, ...], 'NMHC(GT)': [150.0, ...], 'C6H6(GT)': [11.9, ...], 'PT08.S2(NMHC)': [1046.0, ...], 'NOx(GT)': [166.0, ...], 'PT08.S3(NOx)': [1056.0, ...], 'NO2(GT)': [113.0, ...], 'PT08.S4(NO2)': [1692.0, ...], 'PT08.S5(O3)': [1268.0, ...], 'T': [13.6, ...], 'RH': [48.9, ...], 'AH': [0.7578, ...], 'Unnamed: 15': nan, 'Unnamed: 16': nan}, 
+'output': {'CO(GT)': [2.6, ...]}}
 '''
 
 class Dataset_1D(torch.utils.data.Dataset):
@@ -55,7 +55,7 @@ class Dataset_1D(torch.utils.data.Dataset):
         classes = []
         for column in df.columns:
             if (column not in output_variables_names):
-                if (column != 'Date' and column != 'Time'):
+                if (column != 'Date' and column != 'Time' and column !='NMHC(GT)'):
                     input_variables[column] = [float(str(elem).replace(',','.')) for elem in df[column].tolist()]
                     input_variables[column] = self.create_windows(input_variables[column], window_size)
             else:
@@ -64,6 +64,8 @@ class Dataset_1D(torch.utils.data.Dataset):
 
                 classes.append(column)
         
+        self.preprocess_windows (input_variables, output_variables)
+
         self.input = input_variables # dictionary of lists of values
         self.output = output_variables # dictionary of list of values 
         self.classes = classes
@@ -73,8 +75,39 @@ class Dataset_1D(torch.utils.data.Dataset):
     def create_windows (self, list_of_values, window_size):
         windows = []
         for i in range(0, len(list_of_values), window_size):
-            windows.append(list_of_values[i:i+window_size])
+            windows.append(np.array(list_of_values[i:i+window_size]))
         return windows
+    
+    def preprocess_windows (self, input_variables, output_variables):
+        stack_of_windows = []
+        for column in input_variables.keys():
+            stack_of_windows.append(np.array(input_variables[column], dtype=object))
+
+        for column in output_variables.keys():
+            stack_of_windows.append(np.array(output_variables[column], dtype=object))
+
+    
+        stack = np.stack(stack_of_windows, axis=1) # (936,12)
+        print (stack.shape)
+        for i, windows in enumerate(stack):
+            for window in windows:
+                window_len = len(window)
+                if (-200 in window):
+                    count = np.count_nonzero(window == -200)
+                    if (count <= int(0.05 * window_len)): # 0.05 should not be a magic number
+                        ### TO DO: average over all the elmenets, except -200 
+                        ### TO DO: substitute -200 with average
+                        pass
+                    else:
+                        ### TO DO: remove the windows from the stack
+                        #np.delete(stack, i) # to debug
+                        pass
+
+        print (stack.shape)
+        ### TO DO: reconstruct dictionary of input and output from the stack
+
+
+
         
     def __len__(self):
         return self.num_samples    
