@@ -127,16 +127,18 @@ def save_plot_loss_or_acc(info_dict, path, test_name):
     """
 
 
-    for i in info_dict.keys():
-        if i == "acc_test" or i == "loss_test":
-            plt.plot(np.arange(len(info_dict["loss_train"])) , info_dict[i], '-x', label=i)   #per posizionare il test in fondo 
-        else:
-            plt.plot(info_dict[i], '-x', label=i)
+    for k in list(info_dict.keys()):
+        #if k == "acc_test" or k == "loss_test":
+        #    plt.plot(np.arange(len(info_dict[acc_or_loss]["loss_train"])) , info_dict[acc_or_loss][k], '-x', label=k)   #per posizionare il test in fondo 
+        #else:
+        
+        plt.plot(info_dict[k], '-x', label=k)
 
+                
     plt.legend()
     plt.xlabel('epoch')
     plt.ylabel('loss')
-    plt.title('Accuracy vs. No. of epochs')
+    plt.title(  str(list(info_dict.keys())[0]).split("_")[0] + " vs. No. of epochs" )
 
     if not os.path.exists(path):
         os.makedirs(path)
@@ -144,3 +146,21 @@ def save_plot_loss_or_acc(info_dict, path, test_name):
     plt.savefig(path+test_name+".png")
     plt.clf()
     plt.close()
+
+
+    
+
+def save_plots_and_report(ret_dict, save_path, test_name):
+
+    ret_str ="loss_train: " + str(ret_dict["losses"]["loss_train"][-1:])
+    ret_str +="\n\nloss_eval: " + str(ret_dict["losses"]["loss_eval"][-1:]) 
+    ret_str +="\n\nloss_test: " + str(ret_dict["losses"]["loss_test"][-1:]) 
+    ret_str +="\n\nacc_train " + str(ret_dict["acc"]["acc_train"][-1:])
+    ret_str +="\n\nacc_eval: " + str(ret_dict["acc"]["acc_eval"][-1:]) 
+    ret_str +="\n\nacc_test: " + str(ret_dict["acc"]["acc_test"][-1:]) 
+
+    with open(save_path+'RESULTS_'+ test_name +'.txt', 'w+') as f:
+        f.write(test_name + "\n\n"+ ret_str + '\n\nret dict:\n' + str(ret_dict))
+
+    save_plot_loss_or_acc( ret_dict["losses"], path = save_path + "/loss/" , test_name = "loss" )
+    save_plot_loss_or_acc( ret_dict["acc"], path = save_path + "/acc/" , test_name = "acc" )
