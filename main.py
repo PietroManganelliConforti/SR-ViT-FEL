@@ -35,7 +35,7 @@ def collect_data_2D(data_path , input_shape, train_val_split):
 
 
 '''
-Dataset_1D returns input and output as dictionaries of variables
+Dataset_1D returns input and output as dictionaries of variables and at each variable is assigned a window of size WINDOW_SIZE
 
 For example:
 {'input': {'PT08.S1(CO)': [1360.0, ...], 'NMHC(GT)': [150.0, ...], 'C6H6(GT)': [11.9, ...], 'PT08.S2(NMHC)': [1046.0, ...], 'NOx(GT)': [166.0, ...], 'PT08.S3(NOx)': [1056.0, ...], 'NO2(GT)': [113.0, ...], 'PT08.S4(NO2)': [1692.0, ...], 'PT08.S5(O3)': [1268.0, ...], 'T': [13.6, ...], 'RH': [48.9, ...], 'AH': [0.7578, ...], 'Unnamed: 15': nan, 'Unnamed: 16': nan}, 
@@ -43,13 +43,18 @@ For example:
 '''
 
 class Dataset_1D(torch.utils.data.Dataset):
-    def __init__(self, csv_file, output_variables_names, window_size):
+    def __init__(self, csv_file, output_variables_names, window_size, istrain, train_test_split):
 
         df = pd.read_csv(csv_file, sep=';')
 
         df.drop(['Unnamed: 15','Unnamed: 16'], axis = 1, inplace = True) # Unamed sono Nan, e da 9358 in poi sono NaN
         df = df[0:9357]
-        
+        df_len = 9357
+        # split train/test sets
+        if (istrain):
+            df = df[0:int(df_len*(train_test_split))]
+        else:
+            df = df[int(df_len*(train_test_split)):-1]
 
         input_variables, output_variables = {}, {}
         classes = []
@@ -64,51 +69,73 @@ class Dataset_1D(torch.utils.data.Dataset):
 
                 classes.append(column)
         
-        self.preprocess_windows (input_variables, output_variables)
+        input_variables, output_variables, num_samples = self.preprocess_windows (input_variables, output_variables)
 
         self.input = input_variables # dictionary of lists of values
         self.output = output_variables # dictionary of list of values 
         self.classes = classes
-        self.num_samples = len(df) 
+        self.num_samples = num_samples
         self.window_size = window_size
 
     def create_windows (self, list_of_values, window_size):
         windows = []
         for i in range(0, len(list_of_values), window_size):
-            windows.append(np.array(list_of_values[i:i+window_size]))
+            # do not append windows of sizes less than window_size
+            if (len(list_of_values[i:i+window_size]) == window_size):
+                windows.append(np.array(list_of_values[i:i+window_size]))
         return windows
     
+    # TODO: sliding windows
     def preprocess_windows (self, input_variables, output_variables):
         stack_of_windows = []
         for column in input_variables.keys():
-            stack_of_windows.append(np.array(input_variables[column], dtype=object))
+            stack_of_windows.append(np.array(input_variables[column]))
 
         for column in output_variables.keys():
-            stack_of_windows.append(np.array(output_variables[column], dtype=object))
+            stack_of_windows.append(np.array(output_variables[column]))
 
-    
-        stack = np.stack(stack_of_windows, axis=1) # (936,12)
-        print (stack.shape)
+        ### Process the stack of windows ###
+        stack = np.stack(stack_of_windows, axis=1)
+        print ("Stack shape before preprocessing: ", stack.shape)  # (936, 12, WINDOW_SIZE)
+        index_to_remove = []
         for i, windows in enumerate(stack):
-            for window in windows:
+            # Each window is a list of values for a specific variable of size WINDOW_SIZE
+            for window in windows:                              
                 window_len = len(window)
                 if (-200 in window):
-                    count = np.count_nonzero(window == -200)
-                    if (count <= int(0.05 * window_len)): # 0.05 should not be a magic number
-                        ### TO DO: average over all the elmenets, except -200 
-                        ### TO DO: substitute -200 with average
-                        pass
+                    count = np.count_nonzero(window == -200) 
+                    if (count <= int(0.2 * window_len)): # 0.2 should not be a magic number
+                            ### average over all the elements, except -200 
+                            window[window == -200]=np.nan
+                            mean = np.nanmean(window)
+                            # substitute -200 with mean
+                            window[np.isnan(window)] = mean
                     else:
-                        ### TO DO: remove the windows from the stack
-                        #np.delete(stack, i) # to debug
-                        pass
+                        # store the index of the window to be removed from the stack
+                        index_to_remove.append(i)
+                        break
 
-        print (stack.shape)
-        ### TO DO: reconstruct dictionary of input and output from the stack
+        # remove the windows from the stack for all the index_to_remove
+        stack = np.delete(stack, index_to_remove, axis=0)
+        print ("Stack shape after preprocessing: ", stack.shape) # (710, 12, WINDOW_SIZE)
 
-
-
+        ### Reconstruct dictionary of input and output from the stack ###
+        input_columns = input_variables.keys()
+        output_columns = output_variables.keys()
         
+        assert len(input_columns) + len(output_columns) == stack.shape[1]
+
+
+        # as output we have a dictionary of variables, each of which is a list of windows of size WINDOW_SIZE
+        input_variables_ = {}
+        output_variables_ = {}
+        for stack_idx, column in enumerate(input_columns):
+            input_variables_[column] = stack[:, stack_idx]
+        for stack_idx, column in enumerate(output_columns):
+            output_variables_[column] = stack[:, stack_idx+len(input_columns)]
+
+        return input_variables_, output_variables_, stack.shape[0]
+
     def __len__(self):
         return self.num_samples    
         
@@ -131,12 +158,13 @@ class Dataset_1D(torch.utils.data.Dataset):
 
 
 
-def collect_data_1D(data_path , input_shape, train_val_split): 
+def collect_data_1D(csv_file, output_variables_names, window_size, train_test_split, train_val_split): 
 
-    train_dataset = None #todo dataset x dataloader 1D
+    train_dataset = Dataset_1D(csv_file=csv_file, output_variables_names=output_variables_names, window_size=window_size, istrain=True, train_test_split=train_test_split)
 
-    test_dataset = None #todo dataset x dataloader 1D                                                                            
 
+    test_dataset = Dataset_1D(csv_file=csv_file, output_variables_names=output_variables_names, window_size=window_size, istrain=False, train_test_split=train_test_split)
+                                                                 
 
     print(f'Numero di classi: {len(train_dataset.classes)}, \nNumero di Training samples: {len(train_dataset)}, \nNumero di Test sample: {len(test_dataset)}')
 
@@ -312,7 +340,7 @@ def main():
     torch.manual_seed(seed)
 
     torch.cuda.manual_seed(seed)
-    '''
+    
     ####### ARGS
 
     test_name = 'Test_name3'
@@ -342,13 +370,16 @@ def main():
     # Train model
 
     train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, env_path, trained_net_path, debug)
-    '''
     
+    '''
+    # Usage example of Dataset_1D
+    csv_file = "AirQuality.csv"
     output_variables_names = ['CO(GT)']
     window_size = 10
-    var = Dataset_1D(csv_file="AirQuality.csv", output_variables_names=output_variables_names, window_size=window_size)
+    train_test_split = 0.8
+    var = Dataset_1D(csv_file=csv_file, output_variables_names=output_variables_names, window_size=window_size, istrain=True, train_test_split=train_test_split)
     print (var.__getitem__(0))
-    
+    '''
 if __name__ == '__main__':
     
     main()
