@@ -1,3 +1,6 @@
+import argparse
+import json
+import sys
 import numpy as np
 from scipy import signal
 import matplotlib.pyplot as plt
@@ -5,25 +8,25 @@ import pandas as pd
 from tqdm import trange, tqdm
 import os
 
+from main import Dataset_1D
 
 
-def process_intervals(array, interval_length, wavelets, k, step):
+def process_intervals_from_dataset(dataset, wavelets, scales, k, folder_name):
 
-    num_intervals = len(array) // interval_length
     cwt_results = {}
-    cwtmatr_arr = []
 
     for wavelet in wavelets:
         
+        cwtmatr_arr = []
+
         print("Wavelet: ", wavelet.__name__)
 
         cwt_results[wavelet.__name__] = []
 
-        for i in trange(0, len(array) - interval_length, step):
+        for i, sample in enumerate(dataset):
 
-            interval = array[i : i + interval_length ]
-
-            cwtmatr_arr += [signal.cwt(interval, wavelet, np.arange(1, 31))]
+            interval = sample["input"][k]
+            cwtmatr_arr += [signal.cwt(interval, wavelet, scales)]
 
 
         print("Saving..")
@@ -34,7 +37,6 @@ def process_intervals(array, interval_length, wavelets, k, step):
 
 
         for i, cwtmatr in enumerate(tqdm(cwtmatr_arr)):
-
 
             plt.imshow(abs(cwtmatr), extent=[-1, 1, 1, 31], cmap='PRGn', aspect='auto',
                     vmax=abs(cwtmatr).max(), vmin=-abs(cwtmatr).max())
@@ -52,52 +54,82 @@ def process_intervals(array, interval_length, wavelets, k, step):
 
             plt.clf()
 
-    return cwt_results, num_intervals
+    return cwt_results
 
 
+# Parse and save arguments to the command line
 
+command_line = "python " + ' '.join(sys.argv)
 
+# usage: python dataset_generator.py 2D_dataset --scale-type arange --scale-start 1 --scale-stop 127 --scale-step 1 --window-size 168 --step 6
+parser = argparse.ArgumentParser(description='Generate 2D dataset')
+parser.add_argument('output_dir',)
+parser.add_argument('--window-size', type=int, default=24*7,)
+parser.add_argument('--step', type=int, default=6,)
+parser.add_argument('--scale-type', choices=["arange", "lin", "log"],)
+parser.add_argument('--scale-start', type=float)
+parser.add_argument('--scale-stop', type=float)
+parser.add_argument('--scale-num', default=None)
+parser.add_argument('--scale-step', default=None)
+args = parser.parse_args()
 
+if args.scale_type == 'arange' and (args.scale_num is not None or args.scale_step is None):
+    raise ValueError()
+elif args.scale_type != 'arange' and (args.scale_num is None or args.scale_step is not None):
+    raise ValueError()
 
-# Caricamento del file CSV in un DataFrame di pandas
-df = pd.read_csv('AirQuality.csv',sep=";")
+if args.scale_start <= 0:
+    raise ValueError()
 
-df.drop(['Date','Time','Unnamed: 15','Unnamed: 16'], axis = 1, inplace = True) # Unamed sono Nan, e da 9358 in poi sono NaN
-
-df = df[0:9357]
-
-# Creazione di un dizionario in cui ogni chiave è il nome di una colonna e il valore è un array con i dati di quella colonna
-arrays = {column: df[column].values for column in df.columns}
-
-
-wavelets = [signal.ricker, signal.morlet]   
-
-"""
-   cascade      -- Compute scaling function and wavelet from coefficients.
-   daub         -- Return low-pass.
-   morlet       -- Complex Morlet wavelet.
-   qmf          -- Return quadrature mirror filter from low-pass.
-   ricker       -- Return ricker wavelet.
-   morlet2      -- Return Morlet wavelet, compatible with cwt.
-   cwt          -- Perform continuous wavelet transform.
-"""
-
-
-
-folder_name = "2D_Dataset"
+folder_name = args.output_dir #"2D_Dataset"
 
 if not os.path.exists(folder_name):
 
     os.makedirs(folder_name)
 
+with open(args.output_dir + '/command_line.txt', 'w') as file:
+    file.write(command_line)
+
+# with open(args.output_dir + "/params.json", "w") as f:
+#     json.dump(vars(args), f)
 
 
 
-step = 1000
+# Generate the dataset
 
-interval_length = 1000
+dataset = Dataset_1D(
+    csv_file='AirQuality.csv',
+    output_variables_names=[],
+    window_size=args.window_size,
+    step=args.step,
+)
 
-for k in list(arrays.keys()):
+# for i, d in enumerate(dataset):
+#     obj = d["input"]["CO(GT)"]
+#     if i == 0:
+#         print(f'{obj[0:100]}')
+#     print(i, type(obj), obj.shape)
+# print(len(dataset))
+
+wavelets = [
+    signal.ricker,
+    signal.morlet,
+    signal.morlet2,
+    # signal.cascade,
+    # signal.daub,
+    # signal.qmf,
+]
+
+scales = {
+    "arange": np.arange,
+    "lin": np.linspace,
+    "log": np.logspace,
+}[args.scale_type](args.scale_start, args.scale_stop, args.scale_num).astype(int)
+# examples:
+# scales = np.arange(1, 127) # avg between 127 and 31
+# scales = np.logspace(start=1, stop=127, num=32) # doesn't seem to work
+
+for k in list(next(iter(dataset))["input"].keys()):
 
     print("Saving param: ", k)
 
@@ -105,7 +137,7 @@ for k in list(arrays.keys()):
 
         os.makedirs(folder_name + "/" + k)
 
-    results, num_intervals = process_intervals(arrays[k], interval_length, wavelets, k, step=step)
+    results = process_intervals_from_dataset(dataset, wavelets, scales, k, folder_name=folder_name)
 
 
 

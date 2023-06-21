@@ -43,7 +43,11 @@ For example:
 '''
 
 class Dataset_1D(torch.utils.data.Dataset):
-    def __init__(self, csv_file, output_variables_names, window_size, istrain, train_test_split):
+    def __init__(self, csv_file, output_variables_names, window_size, step, window_discard_ratio=0.2, istrain=True, train_test_split=1.0):
+
+        assert step <= window_size
+
+        self.window_discard_ratio = window_discard_ratio
 
         df = pd.read_csv(csv_file, sep=';')
 
@@ -62,10 +66,10 @@ class Dataset_1D(torch.utils.data.Dataset):
             if (column not in output_variables_names):
                 if (column != 'Date' and column != 'Time' and column !='NMHC(GT)'):
                     input_variables[column] = [float(str(elem).replace(',','.')) for elem in df[column].tolist()]
-                    input_variables[column] = self.create_windows(input_variables[column], window_size)
+                    input_variables[column] = self.create_windows(input_variables[column], window_size, step)
             else:
                 output_variables[column] = [float(str(elem).replace(',','.')) for elem in df[column].tolist()]  
-                output_variables[column] = self.create_windows(output_variables[column], window_size)
+                output_variables[column] = self.create_windows(output_variables[column], window_size, step)
 
                 classes.append(column)
         
@@ -76,10 +80,11 @@ class Dataset_1D(torch.utils.data.Dataset):
         self.classes = classes
         self.num_samples = num_samples
         self.window_size = window_size
+        self.step = step
 
-    def create_windows (self, list_of_values, window_size):
+    def create_windows (self, list_of_values, window_size, step):
         windows = []
-        for i in range(0, len(list_of_values), window_size):
+        for i in range(0, len(list_of_values), step):
             # do not append windows of sizes less than window_size
             if (len(list_of_values[i:i+window_size]) == window_size):
                 windows.append(np.array(list_of_values[i:i+window_size]))
@@ -100,11 +105,11 @@ class Dataset_1D(torch.utils.data.Dataset):
         index_to_remove = []
         for i, windows in enumerate(stack):
             # Each window is a list of values for a specific variable of size WINDOW_SIZE
-            for window in windows:                              
+            for window in windows:
                 window_len = len(window)
                 if (-200 in window):
                     count = np.count_nonzero(window == -200) 
-                    if (count <= int(0.2 * window_len)): # 0.2 should not be a magic number
+                    if (count <= int(self.window_discard_ratio * window_len)):
                             ### average over all the elements, except -200 
                             window[window == -200]=np.nan
                             mean = np.nanmean(window)
@@ -137,7 +142,7 @@ class Dataset_1D(torch.utils.data.Dataset):
         return input_variables_, output_variables_, stack.shape[0]
 
     def __len__(self):
-        return self.num_samples    
+        return self.num_samples
         
     def __getitem__(self, idx):
 
