@@ -11,7 +11,7 @@ import os
 from main import Dataset_1D
 
 
-def process_intervals_from_dataset(dataset, wavelets, scales, k, folder_name):
+def process_intervals_from_dataset(dataset, wavelets, scales, k, window_size, step, folder_name):
 
     cwt_results = {}
 
@@ -43,7 +43,7 @@ def process_intervals_from_dataset(dataset, wavelets, scales, k, folder_name):
             
             fig_name = folder_name + "/" + k + "/" + wavelet.__name__ + "/" + str(i) + "_"
             
-            label = "target" #TODO CON LA LABEL CORRETTA
+            label = str(i*step) + "_" + str(i*step+window_size) #TODO CON LA LABEL CORRETTA
 
             fig_name += label
 
@@ -137,7 +137,7 @@ for k in list(next(iter(dataset))["input"].keys()):
 
         os.makedirs(folder_name + "/" + k)
 
-    results = process_intervals_from_dataset(dataset, wavelets, scales, k, folder_name=folder_name)
+    results = process_intervals_from_dataset(dataset, wavelets, scales, k, args.window_size, args.step, folder_name=folder_name)
 
 
 
