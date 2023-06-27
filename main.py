@@ -4,7 +4,7 @@ import numpy as np
 from utils import *
 import argparse
 import pandas as pd
-
+from StackedResnet import StackedResNet
 
 def collect_data_2D(data_path , input_shape, train_val_split): 
 
@@ -215,6 +215,11 @@ def train_model(test_name, train_bool,
     # Build model
 
     model = torchvision.models.resnet34(pretrained=False, progress=True)
+
+    #num_input_channels = 12  # Number of stacked images in input 
+            
+    #model = StackedResNet(num_input_channels, model) #da provare con la resnet freezata e più conv iniziali
+
 
     model = model.to(device)
 
