@@ -4,6 +4,8 @@ import numpy as np
 from utils import *
 import argparse
 import pandas as pd
+from natsort import natsorted
+import cv2
 from StackedResnet import StackedResNet
 
 def collect_data_2D(data_path , input_shape, train_val_split): 
@@ -185,6 +187,56 @@ def collect_data_1D(csv_file, output_variables_names, window_size, train_test_sp
     return train_data_loader, val_data_loader, test_data_loader
 
 
+# We need to return a stack of variables that will fed as input into the CNN + output
+# TO DO: insert the output, modify input variable names and insert new arguments in dataset2_D
+class Dataset_2D(torch.utils.data.Dataset):
+    def __init__(self, data_path, transform):
+
+        windows = {}
+        old_variable_dir = None
+        for root, _, files in os.walk(data_path):
+            for file in natsorted(files):
+                file_to_load = os.path.join(root, file)
+                transform_dir = root.split("/")[-1]
+                
+                if (transform_dir == transform):
+                    variable_dir = root.split("/")[-2]
+                    # initialize idx of windows if we change variable, and initialize an empty dictionary if idx is not present in windows
+                    if (old_variable_dir != variable_dir): idx = 0
+                    if (idx not in windows): windows[idx] = {}
+
+                    img = cv2.imread(file_to_load)
+                    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                    
+                    windows[idx][variable_dir] = img
+                    old_variable_dir = variable_dir
+                    idx+=1
+
+        self.windows = windows
+        self.num_samples = len(windows)
+        '''
+        self.input = input_variables # dictionary of lists of values
+        self.output = output_variables # dictionary of list of values 
+        self.classes = classes
+        self.num_samples = num_samples
+        '''
+
+    def __len__(self):
+        return self.num_samples
+        
+    def __getitem__(self, idx):
+
+        windows = []
+        for key in self.windows[idx].keys():
+            windows.append(self.windows[idx][key])
+
+
+        windows = torch.Tensor(windows)
+        print (windows.shape)
+        item = {'input': windows}
+        return item
+
+
 
 
 def train_model(test_name, train_bool, 
@@ -350,7 +402,7 @@ def main():
     torch.manual_seed(seed)
 
     torch.cuda.manual_seed(seed)
-    
+    #'''
     ####### ARGS
 
     test_name = 'Test_name3'
@@ -378,7 +430,7 @@ def main():
     train_data_loader, val_data_loader, test_data_loader = collect_data_2D(data_path=data_path, input_shape=input_shape, train_val_split=train_val_split)
 
     # Train model
-
+    #'''
     train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, env_path, trained_net_path, debug)
     
     '''
@@ -390,6 +442,12 @@ def main():
     var = Dataset_1D(csv_file=csv_file, output_variables_names=output_variables_names, window_size=window_size, istrain=True, train_test_split=train_test_split)
     print (var.__getitem__(0))
     '''
+    '''
+    var = Dataset_2D(data_path="2D_baseline", transform="morlet")
+    print (var.__getitem__(0))
+    '''
+
+
 if __name__ == '__main__':
     
     main()
