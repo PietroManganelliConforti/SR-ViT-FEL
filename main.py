@@ -6,14 +6,16 @@ import argparse
 import pandas as pd
 from natsort import natsorted
 import cv2
-#from StackedResnet import StackedResNet
+from StackedResnet import StackedResNet
 
-def collect_data_2D(data_path , input_shape, train_val_split): 
+def collect_data_2D(data_path , transform, device, output_var, train_test_split, train_val_split): 
 
-    train_dataset = None #todo dataloader 2D
+    
+    dataset = Dataset_2D(data_path=data_path, transform=transform, device=device, output_var=output_var, istrain=True)
 
-    test_dataset = None #todo dataloader 2D
+    #test_dataset = Dataset_2D(data_path="2D_datasets/2D_scale_step_large", transform="morlet", device=device, output_var="CO(GT)", istrain=True)
 
+    """
     train_dataset = torchvision.datasets.FGVCAircraft(root=data_path, split='trainval', transform=torchvision.transforms.Compose([torchvision.transforms.Resize((input_shape[1], input_shape[2]), antialias=True),
                                                                                                                                     torchvision.transforms.AutoAugment(),
                                                                                                                                     torchvision.transforms.ToTensor(),                                                                                                                                
@@ -22,15 +24,19 @@ def collect_data_2D(data_path , input_shape, train_val_split):
     test_dataset = torchvision.datasets.FGVCAircraft(root=data_path, split='test', transform=torchvision.transforms.Compose([torchvision.transforms.Resize((input_shape[1], input_shape[2]), antialias=True),
                                                                                                                                torchvision.transforms.ToTensor(),
                                                                                                                                torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])]), download=True)
-    
-    print(f'Numero di classi: {len(train_dataset.classes)}, \nNumero di Training samples: {len(train_dataset)}, \nNumero di Test sample: {len(test_dataset)}')
+    """
 
+    print(f'\nNumero di Training samples: {len(dataset)}')
+
+    train_dataset, test_dataset = torch.utils.data.random_split(dataset, [len(dataset) - int(len(dataset)*train_test_split), int(len(dataset)*train_test_split)])
+    
     train_dataset, val_dataset = torch.utils.data.random_split(train_dataset, [len(train_dataset) - int(len(train_dataset)*train_val_split), int(len(train_dataset)*train_val_split)])
+    
     print(f'Ther are: {len(train_dataset)} training samples, {len(val_dataset)} validation samples and {len(test_dataset)} test samples')
 
     # create dataloaders
-    train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=2, shuffle=True, num_workers=1)
-    val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=2, shuffle=True, num_workers=1)
+    train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=1, shuffle=True, num_workers=1)
+    val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=True, num_workers=1)
     test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=1)
 
     return train_data_loader, val_data_loader, test_data_loader
@@ -44,6 +50,7 @@ For example:
 '''
 
 class Dataset_1D(torch.utils.data.Dataset):
+
     def __init__(self, csv_file, window_size, step, window_discard_ratio=0.2):
 
         assert step <= window_size
@@ -55,11 +62,13 @@ class Dataset_1D(torch.utils.data.Dataset):
         df.drop(['Unnamed: 15','Unnamed: 16'], axis = 1, inplace = True) # Unamed sono Nan, e da 9358 in poi sono NaN
         df = df[0:9357]
 
+        self.forecast_labels = {}
         variables = {}
         for column in df.columns:
             if (column != 'Date' and column != 'Time' and column !='NMHC(GT)'):
+
                 variables[column] = [float(str(elem).replace(',','.')) for elem in df[column].tolist()]
-                variables[column] = self.create_windows(variables[column], window_size, step)
+                variables[column], self.forecast_labels[column] = self.create_windows(variables[column], window_size, step)
     
         
         variables, num_samples = self.preprocess_windows (variables)
@@ -72,11 +81,17 @@ class Dataset_1D(torch.utils.data.Dataset):
 
     def create_windows (self, list_of_values, window_size, step):
         windows = []
+        fore_list = []
         for i in range(0, len(list_of_values), step):
             # do not append windows of sizes less than window_size
             if (len(list_of_values[i:i+window_size]) == window_size):
                 windows.append(np.array(list_of_values[i:i+window_size]))
-        return windows
+
+                if i < len(list_of_values) - window_size: 
+                    fore_list.append(list_of_values[i+window_size])
+                
+
+        return windows, np.array(fore_list)
     
     # TODO: sliding windows
     def preprocess_windows (self, variables):
@@ -107,6 +122,10 @@ class Dataset_1D(torch.utils.data.Dataset):
 
         # remove the windows from the stack for all the index_to_remove
         stack = np.delete(stack, index_to_remove, axis=0)
+
+        for c in self.forecast_labels.keys():
+            self.forecast_labels[c] = np.delete(self.forecast_labels[c], index_to_remove, axis=0)
+
         print ("Stack shape after preprocessing: ", stack.shape) # (710, 12, WINDOW_SIZE)
 
         ### Reconstruct dictionary of input and output from the stack ###
@@ -130,8 +149,12 @@ class Dataset_1D(torch.utils.data.Dataset):
         input_dict = {}
         for key in self.input.keys():
             input_dict[key] = self.input[key][idx]
+
+        fore_dict = {}
+        for key in self.input.keys():
+            fore_dict[key] = self.forecast_labels[key][idx]
         
-        item = {'input': input_dict}
+        item = {'input': input_dict, 'fore_dict': fore_dict}
 
         return item
 
@@ -154,7 +177,7 @@ def collect_data_1D(csv_file, output_variables_names, window_size, train_test_sp
 
     # create dataloaders
     train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=1, shuffle=True, num_workers=1)
-    val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=True, num_workers=1)
+    val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=1)
     test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=1)
 
     return train_data_loader, val_data_loader, test_data_loader
@@ -163,7 +186,7 @@ def collect_data_1D(csv_file, output_variables_names, window_size, train_test_sp
 # We need to return a stack of variables that will fed as input into the CNN + output
 # TO DO: insert the output, modify input variable names and insert new arguments in dataset2_D
 class Dataset_2D(torch.utils.data.Dataset):
-    def __init__(self, data_path, transform, device, output_var, istrain=True, train_test_split=0.8, mode="forecasting"):
+    def __init__(self, data_path, transform, device, output_var, istrain=True, train_test_split=0.8, mode="regression"):
         
         assert mode == "forecasting" or mode == "regression"
         
@@ -181,7 +204,8 @@ class Dataset_2D(torch.utils.data.Dataset):
                     if (idx not in windows): windows[idx] = {}
 
                     img = cv2.imread(file_to_load)
-                    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) 
+                    img = img.astype(np.float32)/255
                     
                     windows[idx][variable_dir] = img
                     old_variable_dir = variable_dir
@@ -190,9 +214,15 @@ class Dataset_2D(torch.utils.data.Dataset):
         windows = list(windows.values())
         # split train/test sets
         # In forecasting the last element should be at idx "-2" so the output will be at idx = -1
+
+        
+        
+        """
         if (istrain):
+
             self.starting_idx = 0
             windows = windows[self.starting_idx:int(len(windows)*(train_test_split)-1)] if (mode == "forecasting") else windows[self.starting_idx:int(len(windows)*(train_test_split))]
+        
         else:
             if (mode == "forecasting"):
                 self.starting_idx = int(len(windows)*(train_test_split)-1)
@@ -200,7 +230,7 @@ class Dataset_2D(torch.utils.data.Dataset):
             else: 
                 self.starting_idx = int(len(windows)*(train_test_split))
                 windows = windows[self.starting_idx:-1]
-
+        """
 
         self.windows = windows
         self.num_samples = len(windows)
@@ -212,8 +242,14 @@ class Dataset_2D(torch.utils.data.Dataset):
 
 
     def __len__(self):
-        return self.num_samples
+
+        if self.mode == "forecasting": return self.num_samples - 1
+
+        if self.mode == "regression": return self.num_samples
+
+        raise Exception()
         
+
     def __getitem__(self, idx):
 
         windows = []
@@ -221,23 +257,37 @@ class Dataset_2D(torch.utils.data.Dataset):
             windows.append(self.windows[idx][key])
 
         if (self.mode == "forecasting"):
-            input = torch.Tensor(windows).to(self.device)
+            input = torch.tensor(np.array(windows)).to(self.device)
 
             # Labe/Output
-            label_file = os.path.join(self.data_path, self.output_var+".txt")
+            label_file = os.path.join(self.data_path, self.output_var,"fore_labels.txt")
             f = open(label_file, "r")
             outputs = f.readlines()
             f.close()
+
+            output = torch.tensor(float(outputs[idx].strip())).to(self.device)
+
             # If the input is at idx, in forecasting we are taking from the .txt file the starting_idx+idx+1
-            output = torch.tensor(float(outputs[self.starting_idx+idx+1].strip().split()[-1])).to(self.device)
+            #output = torch.tensor(float(outputs[self.starting_idx+idx].strip().split()[-1])).to(self.device)
 
 
         elif (self.mode == "regression"):
-            # TO DO
-            pass
+
+            input = torch.tensor(np.array(windows)).to(self.device)
+
+            # Labe/Output
+            label_file = os.path.join(self.data_path, self.output_var,"regr_labels.txt")
+            f = open(label_file, "r")
+            outputs = f.readlines()
+            f.close()
+
+            output = torch.tensor(float(outputs[idx].strip())).to(self.device)
+
+            # If the input is at idx, in forecasting we are taking from the .txt file the starting_idx+idx+1
+            #output = torch.tensor(float(outputs[self.starting_idx+idx+1].strip().split()[-1])).to(self.device)
         
-        item = {'input': input, 'output': output}
-        return item
+        #item = {'input': input, 'output': output}
+        return input, output
 
 
 
@@ -271,9 +321,9 @@ def train_model(test_name, train_bool,
 
     model = torchvision.models.resnet34(pretrained=False, progress=True)
 
-    #num_input_channels = 12  # Number of stacked images in input 
+    num_input_channels = 12  # Number of stacked images in input 
             
-    #model = StackedResNet(num_input_channels, model) #da provare con la resnet freezata e più conv iniziali
+    model = StackedResNet(num_input_channels, model) #da provare con la resnet freezata e più conv iniziali
 
 
     model = model.to(device)
@@ -310,9 +360,11 @@ def train_model(test_name, train_bool,
 
             for images, labels in train_loader:
 
+                print(images.shape)
+
                 out = model(images) 
                 optimizer.zero_grad()
-                loss = torch.nn.functional.cross_entropy(out, labels)
+                loss = torch.nn.functional.mse_loss(out, labels)
                 loss.backward()
                 optimizer.step()
                 train_loss += loss.item()
@@ -384,17 +436,24 @@ def train_model(test_name, train_bool,
 def main():
 
     parser = argparse.ArgumentParser()
+
     parser.add_argument('--gpu', type=str, required=True)
+
     parser.add_argument('--do_test', action='store_true')
+
     parser.add_argument('--do_debug', action='store_true')
 
     args = parser.parse_args()
     
     debug = args.do_debug
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
+    device = args.gpu
+    #device = hardware_check()
+
+
+    os.environ["CUDA_VISIBLE_DEVICES"] = device
  
-    print("GPU IN USO: ", args.gpu)
+    print("GPU IN USO: ", device)
 
     # Seed #
 
@@ -405,7 +464,9 @@ def main():
     torch.manual_seed(seed)
 
     torch.cuda.manual_seed(seed)
-    '''
+
+
+
     ####### ARGS
 
     test_name = 'Test_name3'
@@ -417,6 +478,8 @@ def main():
     input_shape = (3, 362, 512)
 
     train_val_split = 0.1
+
+    train_test_split = 0.2
 
     lr = 1e-5
 
@@ -430,25 +493,44 @@ def main():
 
     trained_net_path = ""
 
-    train_data_loader, val_data_loader, test_data_loader = collect_data_2D(data_path=data_path, input_shape=input_shape, train_val_split=train_val_split)
+    data_path = "2D_datasets/2D_scale_step_large"
+
+    output_var = "CO(GT)"
+
+    transform = "morlet2"
+
+    train_data_loader, val_data_loader, test_data_loader = collect_data_2D(data_path=data_path, transform = transform, device = device, output_var= output_var, train_test_split=train_test_split, train_val_split=train_val_split)
 
     # Train model
-    
+
     train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, env_path, trained_net_path, debug)
-    '''
-    '''
+ 
+
+    """
+
     # Usage example of Dataset_1D
+
     csv_file = "AirQuality.csv"
+
     window_size = 10
+
     train_test_split = 0.8
+
     var = Dataset_1D(csv_file=csv_file, window_size=window_size, step = 10)
+
     print (var.__getitem__(0))
-    '''
+
+    """
+
+
+  
+
+
+    #var = Dataset_2D(data_path=data_path, transform="morlet", device=device, output_var="CO(GT)", istrain=True)
+    #print (var.__getitem__(0))
     
-    device = hardware_check()
-    var = Dataset_2D(data_path="2D_baseline", transform="morlet", device=device, output_var="CO(GT)", istrain=True)
-    print (var.__getitem__(0))
-    
+
+
 
 
 if __name__ == '__main__':

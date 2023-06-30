@@ -11,7 +11,7 @@ import os
 from main import Dataset_1D
 
 
-def process_intervals_from_dataset(dataset, wavelets, scales, k, window_size, step, folder_name):
+def process_intervals_from_dataset(dataset, wavelets, scales, k, window_size, step, folder_name, only_labels_flag = False):
 
     cwt_results = {}
 
@@ -23,11 +23,26 @@ def process_intervals_from_dataset(dataset, wavelets, scales, k, window_size, st
 
         cwt_results[wavelet.__name__] = []
 
+        f_regr = open(folder_name + "/" + k + "/regr_labels.txt", "w")
+
+        f_fore = open(folder_name + "/" + k + "/fore_labels.txt", "w")
+
         for i, sample in enumerate(dataset):
 
             interval = sample["input"][k]
-            cwtmatr_arr += [signal.cwt(interval, wavelet, scales)]
 
+            f_fore.write(str(sample["fore_dict"][k])+"\n")
+
+            f_regr.write(str(np.mean(interval))+"\n")
+
+            if not only_labels_flag: cwtmatr_arr += [signal.cwt(interval, wavelet, scales)]
+
+
+        f_regr.close()
+
+        f_fore.close()
+
+        if only_labels_flag: continue
 
         print("Saving..")
 
@@ -54,7 +69,6 @@ def process_intervals_from_dataset(dataset, wavelets, scales, k, window_size, st
 
             plt.clf()
 
-    return cwt_results
 
 
 # Parse and save arguments to the command line
@@ -71,6 +85,7 @@ parser.add_argument('--scale-start', type=float)
 parser.add_argument('--scale-stop', type=float)
 parser.add_argument('--scale-num', default=None)
 parser.add_argument('--scale-step', default=None)
+parser.add_argument('--only-labels', action='store_true')
 args = parser.parse_args()
 
 if args.scale_type == 'arange' and (args.scale_num is not None or args.scale_step is None):
@@ -99,7 +114,6 @@ with open(args.output_dir + '/command_line.txt', 'w') as file:
 
 dataset = Dataset_1D(
     csv_file='AirQuality.csv',
-    output_variables_names=[],
     window_size=args.window_size,
     step=args.step,
 )
@@ -129,6 +143,8 @@ scales = {
 # scales = np.arange(1, 127) # avg between 127 and 31
 # scales = np.logspace(start=1, stop=127, num=32) # doesn't seem to work
 
+only_labels_flag = args.only_labels
+
 for k in list(next(iter(dataset))["input"].keys()):
 
     print("Saving param: ", k)
@@ -137,7 +153,7 @@ for k in list(next(iter(dataset))["input"].keys()):
 
         os.makedirs(folder_name + "/" + k)
 
-    results = process_intervals_from_dataset(dataset, wavelets, scales, k, args.window_size, args.step, folder_name=folder_name)
+    process_intervals_from_dataset(dataset, wavelets, scales, k, args.window_size, args.step, folder_name=folder_name, only_labels_flag=only_labels_flag)
 
 
 

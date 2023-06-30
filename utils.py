@@ -104,7 +104,7 @@ def evaluate_model(model, loader):
         out = model(images)
 
         acc += accuracy(out,labels)
-        loss += torch.nn.functional.cross_entropy(out, labels)
+        loss += torch.nn.functional.mse_loss(out, labels)
 
     return (loss/len(loader)).item(), (acc/len(loader)).item()
 
