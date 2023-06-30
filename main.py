@@ -6,7 +6,7 @@ import argparse
 import pandas as pd
 from natsort import natsorted
 import cv2
-from StackedResnet import StackedResNet
+#from StackedResnet import StackedResNet
 
 def collect_data_2D(data_path , input_shape, train_val_split): 
 
@@ -189,14 +189,18 @@ class Dataset_2D(torch.utils.data.Dataset):
 
         windows = list(windows.values())
         # split train/test sets
+        # In forecasting the last element should be at idx "-2" so the output will be at idx = -1
         if (istrain):
-            windows = windows[0:int(len(windows)*(train_test_split))]
+            self.starting_idx = 0
+            windows = windows[self.starting_idx:int(len(windows)*(train_test_split)-1)] if (mode == "forecasting") else windows[self.starting_idx:int(len(windows)*(train_test_split))]
         else:
-            # In forecasting the last element should be at idx "-2" so the output will be at idx = -1
             if (mode == "forecasting"):
-                windows = windows[int(len(windows)*(train_test_split)):-2]  
-            elif(mode == "regression"):
-                windows = windows[int(len(windows)*(train_test_split)):-1]
+                self.starting_idx = int(len(windows)*(train_test_split)-1)
+                windows = windows[self.starting_idx:-2]  
+            else: 
+                self.starting_idx = int(len(windows)*(train_test_split))
+                windows = windows[self.starting_idx:-1]
+
 
         self.windows = windows
         self.num_samples = len(windows)
@@ -224,8 +228,8 @@ class Dataset_2D(torch.utils.data.Dataset):
             f = open(label_file, "r")
             outputs = f.readlines()
             f.close()
-            # If the input is at idx, in forecasting we are taking idx+1
-            output = torch.tensor(float(outputs[idx+1].strip().split()[-1])).to(self.device)
+            # If the input is at idx, in forecasting we are taking from the .txt file the starting_idx+idx+1
+            output = torch.tensor(float(outputs[self.starting_idx+idx+1].strip().split()[-1])).to(self.device)
 
 
         elif (self.mode == "regression"):
@@ -442,7 +446,7 @@ def main():
     '''
     
     device = hardware_check()
-    var = Dataset_2D(data_path="2D_baseline", transform="morlet", device=device, output_var="CO(GT)")
+    var = Dataset_2D(data_path="2D_baseline", transform="morlet", device=device, output_var="CO(GT)", istrain=True)
     print (var.__getitem__(0))
     
 
