@@ -7,6 +7,7 @@ import pandas as pd
 from natsort import natsorted
 import cv2
 from StackedResnet import StackedResNet
+from StackedLinear import StackedLinear
 
 def collect_data_2D(data_path , transform, device, output_var, train_test_split, train_val_split): 
 
@@ -42,18 +43,130 @@ def collect_data_2D(data_path , transform, device, output_var, train_test_split,
     return train_data_loader, val_data_loader, test_data_loader
 
 
+
 '''
 Dataset_1D returns input and output as dictionaries of variables and at each variable is assigned a window of size WINDOW_SIZE
 
 For example:
-{'input': {'PT08.S1(CO)': [1360.0, ...], 'NMHC(GT)': [150.0, ...], 'C6H6(GT)': [11.9, ...], 'PT08.S2(NMHC)': [1046.0, ...], 'NOx(GT)': [166.0, ...], 'PT08.S3(NOx)': [1056.0, ...], 'NO2(GT)': [113.0, ...], 'PT08.S4(NO2)': [1692.0, ...], 'PT08.S5(O3)': [1268.0, ...], 'T': [13.6, ...], 'RH': [48.9, ...], 'AH': [0.7578, ...], 'Unnamed: 15': nan, 'Unnamed: 16': nan}, 
-'output': {'CO(GT)': [2.6, ...]}}
+{'input': {'PT08.S1(CO)': [1360.0, ...], 'NMHC(GT)': [150.0, ...], 'C6H6(GT)': [11.9, ...], 'PT08.S2(NMHC)': [1046.0, ...], 'NOx(GT)': [166.0, ...], 'PT08.S3(NOx)': [1056.0, ...], 'NO2(GT)': [113.0, ...], 'PT08.S4(NO2)': [1692.0, ...], 'PT08.S5(O3)': [1268.0, ...], 'T': [13.6, ...], 'RH': [48.9, ...], 'AH': [0.7578, ...], 'Unnamed: 15': nan, 'Unnamed: 16': nan}}
 '''
 
 class Dataset_1D(torch.utils.data.Dataset):
-    def __init__(self, csv_file, output_variables_names, window_size, step=6, window_discard_ratio=0.2):
+
+    def __init__(self, csv_file, window_size, step, window_discard_ratio=0.2):
 
         assert step <= window_size
+
+        self.window_discard_ratio = window_discard_ratio
+
+        df = pd.read_csv(csv_file, sep=';')
+
+        df.drop(['Unnamed: 15','Unnamed: 16'], axis = 1, inplace = True) # Unamed sono Nan, e da 9358 in poi sono NaN
+        df = df[0:9357]
+
+        self.forecast_labels = {}
+        variables = {}
+        for column in df.columns:
+            if (column != 'Date' and column != 'Time' and column !='NMHC(GT)'):
+
+                variables[column] = [float(str(elem).replace(',','.')) for elem in df[column].tolist()]
+                variables[column], self.forecast_labels[column] = self.create_windows(variables[column], window_size, step)
+    
+        
+        variables, num_samples = self.preprocess_windows (variables)
+
+        self.input = variables # dictionary of lists of values
+        #self.classes = classes
+        self.num_samples = num_samples
+        self.window_size = window_size
+        self.step = step
+
+    def create_windows (self, list_of_values, window_size, step):
+        windows = []
+        fore_list = []
+        for i in range(0, len(list_of_values), step):
+            # do not append windows of sizes less than window_size
+            if (len(list_of_values[i:i+window_size]) == window_size):
+                windows.append(np.array(list_of_values[i:i+window_size]))
+
+                if i < len(list_of_values) - window_size: 
+                    fore_list.append(list_of_values[i+window_size])
+                
+
+        return windows, np.array(fore_list)
+    
+    # TODO: sliding windows
+    def preprocess_windows (self, variables):
+        stack_of_windows = []
+        for column in variables.keys():
+            stack_of_windows.append(np.array(variables[column]))
+
+        ### Process the stack of windows ###
+        stack = np.stack(stack_of_windows, axis=1)
+        print ("Stack shape before preprocessing: ", stack.shape)  # (936, 12, WINDOW_SIZE)
+        index_to_remove = []
+        for i, windows in enumerate(stack):
+            # Each window is a list of values for a specific variable of size WINDOW_SIZE
+            for window in windows:
+                window_len = len(window)
+                if (-200 in window):
+                    count = np.count_nonzero(window == -200) 
+                    if (count <= int(self.window_discard_ratio * window_len)):
+                            ### average over all the elements, except -200 
+                            window[window == -200]=np.nan
+                            mean = np.nanmean(window)
+                            # substitute -200 with mean
+                            window[np.isnan(window)] = mean
+                    else:
+                        # store the index of the window to be removed from the stack
+                        index_to_remove.append(i)
+                        break
+
+        # remove the windows from the stack for all the index_to_remove
+        stack = np.delete(stack, index_to_remove, axis=0)
+
+        for c in self.forecast_labels.keys():
+            self.forecast_labels[c] = np.delete(self.forecast_labels[c], index_to_remove, axis=0)
+
+        print ("Stack shape after preprocessing: ", stack.shape) # (710, 12, WINDOW_SIZE)
+
+        ### Reconstruct dictionary of input and output from the stack ###
+        input_columns = variables.keys()
+        
+        assert len(input_columns) == stack.shape[1]
+
+
+        # as output we have a dictionary of variables, each of which is a list of windows of size WINDOW_SIZE
+        variables_ = {}
+        for stack_idx, column in enumerate(input_columns):
+            variables_[column] = stack[:, stack_idx]
+
+        return variables_, stack.shape[0]
+
+    def __len__(self):
+        return self.num_samples
+        
+    def __getitem__(self, idx):
+
+        input_dict = {}
+        for key in self.input.keys():
+            input_dict[key] = self.input[key][idx]
+
+        fore_dict = {}
+        for key in self.input.keys():
+            fore_dict[key] = self.forecast_labels[key][idx]
+        
+        item = {'input': input_dict, 'fore_dict': fore_dict}
+
+        return item
+
+
+
+class Dataset_1D_raw(torch.utils.data.Dataset):
+    def __init__(self, csv_file, device, window_size=168, step=6, window_discard_ratio=0.2, mode="forecasting"):
+
+        assert step <= window_size
+        assert mode == "forecasting" or mode == "regression"
 
         self.window_discard_ratio = window_discard_ratio
 
@@ -64,27 +177,36 @@ class Dataset_1D(torch.utils.data.Dataset):
         df_len = len(df)
         
 
-        input_variables, output_variables = {}, {}
-        classes = []
+        input_variables = {}
         for column in df.columns:
-            if (column not in output_variables_names):
-                if (column != 'Date' and column != 'Time' and column !='NMHC(GT)'):
-                    input_variables[column] = [float(str(elem).replace(',','.')) for elem in df[column].tolist()]
-                    input_variables[column] = self.create_windows(input_variables[column], window_size, step)
-            else:
-                output_variables[column] = [float(str(elem).replace(',','.')) for elem in df[column].tolist()]  
-                output_variables[column] = self.create_windows(output_variables[column], window_size, step)
+            if (column != 'Date' and column != 'Time' and column !='NMHC(GT)'):
+                input_variables[column] = [float(str(elem).replace(',','.')) for elem in df[column].tolist()]
+                input_variables[column] = self.create_windows(input_variables[column], window_size, step)
+            
 
-                classes.append(column)
+        if (mode == "forecasting"):
+            column = "forelabels"
+            # Labe/Output
+            label_file = "fore_labelsBASELINECO"
+            f = open(label_file, "r")
+            outputs = f.readlines()
+            f.close()
+            output = [float(str(elem)) for elem in outputs]
+        else:
+            pass
         
-        input_variables, output_variables, num_samples = self.preprocess_windows (input_variables, output_variables)
 
-        self.input = input_variables # dictionary of lists of values
-        self.output = output_variables # dictionary of list of values 
-        self.classes = classes
+        
+        input_stack, num_samples = self.preprocess_windows (input_variables)
+
+        assert num_samples == len(output)
+
+        self.input = input_stack # stack of windows
+        self.output = output # dictionary of list of values 
         self.num_samples = num_samples
         self.window_size = window_size
         self.step = step
+        self.device = device
 
     def create_windows (self, list_of_values, window_size, step):
         windows = []
@@ -95,13 +217,10 @@ class Dataset_1D(torch.utils.data.Dataset):
         return windows
     
     # TODO: sliding windows
-    def preprocess_windows (self, input_variables, output_variables):
+    def preprocess_windows (self, input_variables):
         stack_of_windows = []
         for column in input_variables.keys():
             stack_of_windows.append(np.array(input_variables[column]))
-
-        for column in output_variables.keys():
-            stack_of_windows.append(np.array(output_variables[column]))
 
         ### Process the stack of windows ###
         stack = np.stack(stack_of_windows, axis=1)
@@ -128,49 +247,34 @@ class Dataset_1D(torch.utils.data.Dataset):
         stack = np.delete(stack, index_to_remove, axis=0)
         print ("Stack shape after preprocessing: ", stack.shape) # (710, 12, WINDOW_SIZE)
 
-        ### Reconstruct dictionary of input and output from the stack ###
-        input_columns = input_variables.keys()
-        output_columns = output_variables.keys()
-        
-        assert len(input_columns) + len(output_columns) == stack.shape[1]
-
-
-        # as output we have a dictionary of variables, each of which is a list of windows of size WINDOW_SIZE
-        input_variables_ = {}
-        output_variables_ = {}
-        for stack_idx, column in enumerate(input_columns):
-            input_variables_[column] = stack[:, stack_idx]
-        for stack_idx, column in enumerate(output_columns):
-            output_variables_[column] = stack[:, stack_idx+len(input_columns)]
-
-        return input_variables_, output_variables_, stack.shape[0]
+        return stack, stack.shape[0]
 
     def __len__(self):
         return self.num_samples
         
     def __getitem__(self, idx):
 
-        input_dict = {}
-        for key in self.input.keys():
-            input_dict[key] = self.input[key][idx]
-
-        output_dict = {}
-        for key in self.output.keys():
-            output_dict[key] = self.output[key][idx]
-
+        input_windows = torch.FloatTensor(np.array(self.input[idx])).unsqueeze(0).to(self.device) # [channel=1, h=12, w=168]
+        output = torch.tensor(float(self.output[idx])).to(self.device)
         
-        item = {'input': input_dict,
-                'output': output_dict}
-
-        return item
+        return input_windows, output
 
 
 
 
 
-def collect_data_1D(csv_file, output_variables_names, window_size,  train_test_split, train_val_split): 
 
-    dataset = Dataset_1D(csv_file=csv_file, output_variables_names=output_variables_names, window_size=window_size)
+
+
+
+
+
+
+
+
+def collect_data_1D(csv_file, device, train_test_split, train_val_split): 
+
+    dataset = Dataset_1D_raw(csv_file=csv_file, device=device)
                                                                  
     print(f'\nNumero di Training samples: {len(dataset)}')
 
@@ -178,7 +282,7 @@ def collect_data_1D(csv_file, output_variables_names, window_size,  train_test_s
     
     train_dataset, val_dataset = torch.utils.data.random_split(train_dataset, [len(train_dataset) - int(len(train_dataset)*train_val_split), int(len(train_dataset)*train_val_split)])
     
-    print(f'Ther are: {len(train_dataset)} training samples, {len(val_dataset)} validation samples and {len(test_dataset)} test samples')
+    print(f'There are: {len(train_dataset)} training samples, {len(val_dataset)} validation samples and {len(test_dataset)} test samples')
 
     # create dataloaders
     train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=1, shuffle=True, num_workers=1)
@@ -470,7 +574,7 @@ def main():
 
     torch.cuda.manual_seed(seed)
 
-
+    """
 
     ####### ARGS
 
@@ -510,25 +614,29 @@ def main():
 
     train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, env_path, trained_net_path, debug)
  
-
     """
+    
 
-    # Usage example of Dataset_1D
+    # Usage example of Dataset_1D_raw 
 
     csv_file = "AirQuality.csv"
 
-    window_size = 10
-
-    train_test_split = 0.8
-
-    var = Dataset_1D(csv_file=csv_file, window_size=window_size, step = 10)
-
+    device = "cpu"
+    var = Dataset_1D_raw(csv_file=csv_file, device=device)
     print (var.__getitem__(0))
 
-    """
+    train_test_split = 0.2
+    train_val_split = 0.1
+    train_data_loader, val_data_loader, test_data_loader = collect_data_1D(csv_file=csv_file, device = device, train_test_split=train_test_split, train_val_split=train_val_split)
 
+    
+    
+    print ("Each input has shape: ", var.__getitem__(0)[0].shape)
+    num_input_channels = 1 # [batch, channel=1, h=12, w=168]
+    model = StackedLinear(num_input_channels) 
+    output = model(next(iter(train_data_loader))[0])
+    print (output)
 
-  
 
 
     #var = Dataset_2D(data_path=data_path, transform="morlet", device=device, output_var="CO(GT)", istrain=True)
