@@ -1,6 +1,8 @@
 import os
 import torchvision
 import numpy as np
+from tqdm import trange
+import tqdm
 from utils import *
 import argparse
 import pandas as pd
@@ -9,10 +11,10 @@ import cv2
 from StackedResnet import StackedResNet
 from StackedLinear import StackedLinear
 
-def collect_data_2D(data_path , transform, device, output_var, train_test_split, train_val_split): 
+def collect_data_2D(data_path , transform, device, output_var, train_test_split, train_val_split, mode): 
 
     
-    dataset = Dataset_2D(data_path=data_path, transform=transform, device=device, output_var=output_var, istrain=True)
+    dataset = Dataset_2D(data_path=data_path, transform=transform, device=device, output_var=output_var, mode=mode)
 
     #test_dataset = Dataset_2D(data_path="2D_datasets/2D_scale_step_large", transform="morlet", device=device, output_var="CO(GT)", istrain=True)
 
@@ -64,15 +66,19 @@ class Dataset_1D(torch.utils.data.Dataset):
         df.drop(['Unnamed: 15','Unnamed: 16'], axis = 1, inplace = True) # Unamed sono Nan, e da 9358 in poi sono NaN
         df = df[0:9357]
 
-        self.forecast_labels = {}
         variables = {}
+        self.column_means = {}
         for column in df.columns:
             if (column != 'Date' and column != 'Time' and column !='NMHC(GT)'):
 
                 variables[column] = [float(str(elem).replace(',','.')) for elem in df[column].tolist()]
-                variables[column], self.forecast_labels[column] = self.create_windows(variables[column], window_size, step)
-    
-        
+                variables[column] = self.create_windows(variables[column], window_size, step)
+                values = np.array(variables[column])
+                valid_values = values[values > -100]
+                #print(valid_values)
+                self.column_means[column] = np.mean(valid_values)
+                print(f'Column {column} has mean {self.column_means[column]}')
+ 
         variables, num_samples = self.preprocess_windows (variables)
 
         self.input = variables # dictionary of lists of values
@@ -83,52 +89,72 @@ class Dataset_1D(torch.utils.data.Dataset):
 
     def create_windows (self, list_of_values, window_size, step):
         windows = []
-        fore_list = []
         for i in range(0, len(list_of_values), step):
             # do not append windows of sizes less than window_size
             if (len(list_of_values[i:i+window_size]) == window_size):
-                windows.append(np.array(list_of_values[i:i+window_size]))
-
-                if i < len(list_of_values) - window_size: 
-                    fore_list.append(list_of_values[i+window_size])
+                window = np.array(list_of_values[i:i+window_size])
+                windows.append(window)
                 
 
-        return windows, np.array(fore_list)
+        return windows
     
     # TODO: sliding windows
     def preprocess_windows (self, variables):
         stack_of_windows = []
-        for column in variables.keys():
+        columns = list(variables.keys())
+        for column in columns:
             stack_of_windows.append(np.array(variables[column]))
 
         ### Process the stack of windows ###
+        self.forecast_simple_labels = { k: list() for k in columns }
+        self.forecast_advanced_labels = { k: list() for k in columns }
         stack = np.stack(stack_of_windows, axis=1)
         print ("Stack shape before preprocessing: ", stack.shape)  # (936, 12, WINDOW_SIZE)
         index_to_remove = []
         for i, windows in enumerate(stack):
             # Each window is a list of values for a specific variable of size WINDOW_SIZE
-            for window in windows:
+            for j, window in enumerate(windows):
                 window_len = len(window)
                 if (-200 in window):
-                    count = np.count_nonzero(window == -200) 
-                    if (count <= int(self.window_discard_ratio * window_len)):
-                            ### average over all the elements, except -200 
-                            window[window == -200]=np.nan
-                            mean = np.nanmean(window)
-                            # substitute -200 with mean
-                            window[np.isnan(window)] = mean
+                    count = np.count_nonzero(window == -200)
+                    if count == len(window):
+                        window[:] = self.column_means[columns[j]]
                     else:
+                        ### average over all the elements, except -200 
+                        window[window == -200]=np.nan
+                        mean = np.nanmean(window)
+                        # substitute -200 with mean
+                        window[np.isnan(window)] = mean
+                    if not (count <= int(self.window_discard_ratio * window_len)):
                         # store the index of the window to be removed from the stack
-                        index_to_remove.append(i)
-                        break
+                        if i not in index_to_remove:
+                            index_to_remove.append(i)
+
+        print(f'len(stack): {len(stack)}')
+        for i, next_windows in enumerate(stack[1:]):
+            # Each window is a list of values for a specific variable of size WINDOW_SIZE
+            for j, window in enumerate(next_windows):
+                next_window = next_windows[j]
+                #fore_list.append(list_of_values[i+window_size])
+                win_mean = np.mean(next_window)
+                if win_mean < 0:
+                    raise ValueError(f"Error: win_mean < 0, number of -200: {np.count_nonzero(next_window == -200)}, number of < 0 {np.count_nonzero(next_window < 0)}, column: {columns[j]}, next_window: {next_window}")
+                self.forecast_simple_labels[columns[j]].append(win_mean)
+                self.forecast_advanced_labels[columns[j]].append((win_mean + self.column_means[columns[j]]) / 2)
+
+        for c in columns:
+            self.forecast_simple_labels[c] = np.array(self.forecast_simple_labels[c])
+            self.forecast_advanced_labels[c] = np.array(self.forecast_advanced_labels[c])
 
         # remove the windows from the stack for all the index_to_remove
         stack = np.delete(stack, index_to_remove, axis=0)
 
-        for c in self.forecast_labels.keys():
-            self.forecast_labels[c] = np.delete(self.forecast_labels[c], index_to_remove, axis=0)
+        for c in columns:
+            self.forecast_simple_labels[c] = np.delete(self.forecast_simple_labels[c], index_to_remove, axis=0)
+            self.forecast_advanced_labels[c] = np.delete(self.forecast_advanced_labels[c], index_to_remove, axis=0)
 
         print ("Stack shape after preprocessing: ", stack.shape) # (710, 12, WINDOW_SIZE)
+        print ("forecast_simple_labels shape after preprocessing: ", self.forecast_simple_labels[columns[0]].shape)
 
         ### Reconstruct dictionary of input and output from the stack ###
         input_columns = variables.keys()
@@ -152,11 +178,17 @@ class Dataset_1D(torch.utils.data.Dataset):
         for key in self.input.keys():
             input_dict[key] = self.input[key][idx]
 
-        fore_dict = {}
-        for key in self.input.keys():
-            fore_dict[key] = self.forecast_labels[key][idx]
-        
-        item = {'input': input_dict, 'fore_dict': fore_dict}
+        if idx == self.num_samples - 1:
+            fore_simple_dict = None
+            fore_advanced_dict = None
+        else:
+            fore_simple_dict = {}
+            fore_advanced_dict = {}
+            for key in self.input.keys():
+                fore_simple_dict[key] = self.forecast_simple_labels[key][idx]
+                fore_advanced_dict[key] = self.forecast_advanced_labels[key][idx]
+
+        item = {'input': input_dict, 'fore_simple': fore_simple_dict, 'fore_advanced': fore_advanced_dict}
 
         return item
 
@@ -297,7 +329,7 @@ def collect_data_1D(csv_file, device, train_test_split, train_val_split):
 class Dataset_2D(torch.utils.data.Dataset):
     def __init__(self, data_path, transform, device, output_var, mode="regression"):
         
-        assert mode == "forecasting" or mode == "regression"
+        assert mode in {"forecasting_simple", "forecasting_advanced", "regression"}
         
         windows = {}
         old_variable_dir = None
@@ -347,12 +379,41 @@ class Dataset_2D(torch.utils.data.Dataset):
         self.mode = mode
         self.data_path = data_path
         self.output_var = output_var
+
+        if (mode == "forecasting_simple"):
+
+            # Labe/Output
+            label_file = os.path.join(self.data_path, self.output_var,"fore_simple_labels.txt")
+            f = open(label_file, "r")
+            outputs = f.readlines()
+            f.close()
+
+            self.labels = torch.tensor([float(output.strip()) for output in outputs])
+        elif (mode == "forecasting_advanced"):
+
+            # Labe/Output
+            label_file = os.path.join(self.data_path, self.output_var,"fore_advanced_labels.txt")
+            f = open(label_file, "r")
+            outputs = f.readlines()
+            f.close()
+
+            self.labels = torch.tensor([float(output.strip()) for output in outputs])
+        elif (mode == "regression"):
+
+            # Labe/Output
+            label_file = os.path.join(self.data_path, self.output_var,"regr_labels.txt")
+            f = open(label_file, "r")
+            outputs = f.readlines()
+            f.close()
+
+            self.labels = torch.tensor([float(output.strip()) for output in outputs])
+
         #self.classes = classes
 
 
     def __len__(self):
 
-        if self.mode == "forecasting": return self.num_samples - 1
+        if self.mode == "forecasting_simple" or self.mode == "forecasting_advanced": return self.num_samples - 1
 
         if self.mode == "regression": return self.num_samples
 
@@ -365,35 +426,52 @@ class Dataset_2D(torch.utils.data.Dataset):
         for key in self.windows[idx].keys():
             windows.append(self.windows[idx][key])
 
-        if (self.mode == "forecasting"):
-            input = torch.tensor(np.array(windows)).to(self.device)
+        input = torch.tensor(np.array(windows)) #.to(self.device)
+        output = self.labels[idx] #.to(self.device)
 
-            # Labe/Output
-            label_file = os.path.join(self.data_path, self.output_var,"fore_labels.txt")
-            f = open(label_file, "r")
-            outputs = f.readlines()
-            f.close()
+        # if (self.mode == "forecasting_simple"):
+        #     input = torch.tensor(np.array(windows)) #.to(self.device)
 
-            output = torch.tensor(float(outputs[idx].strip())).to(self.device)
+        #     # Labe/Output
+        #     label_file = os.path.join(self.data_path, self.output_var,"fore_simple_labels.txt")
+        #     f = open(label_file, "r")
+        #     outputs = f.readlines()
+        #     f.close()
 
-            # If the input is at idx, in forecasting we are taking from the .txt file the starting_idx+idx+1
-            #output = torch.tensor(float(outputs[self.starting_idx+idx].strip().split()[-1])).to(self.device)
+        #     output = torch.tensor(float(outputs[idx].strip())) #.to(self.device)
+
+        #     # If the input is at idx, in forecasting we are taking from the .txt file the starting_idx+idx+1
+        #     #output = torch.tensor(float(outputs[self.starting_idx+idx].strip().split()[-1])).to(self.device)
+
+        # elif (self.mode == "forecasting_advanced"):
+        #     input = torch.tensor(np.array(windows)) #.to(self.device)
+
+        #     # Labe/Output
+        #     label_file = os.path.join(self.data_path, self.output_var,"fore_advanced_labels.txt")
+        #     f = open(label_file, "r")
+        #     outputs = f.readlines()
+        #     f.close()
+
+        #     output = torch.tensor(float(outputs[idx].strip())) #.to(self.device)
+
+        #     # If the input is at idx, in forecasting we are taking from the .txt file the starting_idx+idx+1
+        #     #output = torch.tensor(float(outputs[self.starting_idx+idx].strip().split()[-1])).to(self.device)
 
 
-        elif (self.mode == "regression"):
+        # elif (self.mode == "regression"):
 
-            input = torch.tensor(np.array(windows)).to(self.device)
+        #     input = torch.tensor(np.array(windows)) #.to(self.device)
 
-            # Labe/Output
-            label_file = os.path.join(self.data_path, self.output_var,"regr_labels.txt")
-            f = open(label_file, "r")
-            outputs = f.readlines()
-            f.close()
+        #     # Labe/Output
+        #     label_file = os.path.join(self.data_path, self.output_var,"regr_labels.txt")
+        #     f = open(label_file, "r")
+        #     outputs = f.readlines()
+        #     f.close()
 
-            output = torch.tensor(float(outputs[idx].strip())).to(self.device)
+        #     output = torch.tensor(float(outputs[idx].strip())) #.to(self.device)
 
-            # If the input is at idx, in forecasting we are taking from the .txt file the starting_idx+idx+1
-            #output = torch.tensor(float(outputs[self.starting_idx+idx+1].strip().split()[-1])).to(self.device)
+        #     # If the input is at idx, in forecasting we are taking from the .txt file the starting_idx+idx+1
+        #     #output = torch.tensor(float(outputs[self.starting_idx+idx+1].strip().split()[-1])).to(self.device)
         
         #item = {'input': input, 'output': output}
         return input, output
@@ -404,7 +482,7 @@ class Dataset_2D(torch.utils.data.Dataset):
 def train_model(test_name, train_bool, 
                  lr, epochs, train_data_loader, 
                  val_data_loader, test_data_loader,
-                 env_path, trained_net_path= "",
+                 env_path, device, trained_net_path= "",
                  debug = False):
 
     
@@ -412,19 +490,19 @@ def train_model(test_name, train_bool,
 
     # Path
 
-    save_path = env_path + test_name + '/'
+    save_path = env_path + 'results/' + test_name + '/'
 
     if not os.path.exists(save_path):
         os.makedirs(save_path)
 
 
     # Hardware
-    device = hardware_check()
+    #device = hardware_check()
 
     # Setup-train
     torch.cuda.empty_cache()
 
-    best_val_loss, best_val_acc = float('inf'), 0
+    best_val_loss, best_val_rel_err = float('inf'), float('inf')
 
     # Build model
 
@@ -465,11 +543,11 @@ def train_model(test_name, train_bool,
             model.train()
 
             train_loss = 0
-            train_acc = 0
+            train_rel_err = 0
 
-            for images, labels in train_loader:
+            for images, labels in tqdm.tqdm(train_loader):
 
-                print(images.shape)
+                #print(images.shape)
 
                 out = model(images) 
                 optimizer.zero_grad()
@@ -479,26 +557,26 @@ def train_model(test_name, train_bool,
                 train_loss += loss.item()
 
                 _, preds = torch.max(out, dim=1)
-                acc = torch.tensor(torch.sum(preds == labels).item() / len(preds))
-                train_acc += acc.item()
+                rel_err = ((out - labels) / labels).abs().mean()
+                train_rel_err += rel_err.item()
 
 
             ret_dict["losses"]["loss_train"].append(train_loss/len(train_loader)) 
-            ret_dict["acc"]["acc_train"].append(train_acc/len(train_loader)) 
+            ret_dict["rel_err"]["rel_err_train"].append(train_rel_err/len(train_loader)) 
 
             # Validation phase
             model.eval()
             
             with torch.no_grad():
 
-                val_loss, val_acc = evaluate_model(model, val_loader) 
+                val_loss, val_rel_err = evaluate_model(model, val_loader) 
 
                 print(val_loss)
 
                 ret_dict["losses"]["loss_eval"].append(val_loss) 
-                ret_dict["acc"]["acc_eval"].append(val_acc) 
+                ret_dict["rel_err"]["rel_err_eval"].append(val_rel_err) 
             
-            print("[EPOCH "+str(epoch)+"]","Val_loss: ", val_loss, "val_acc: ", val_acc)
+            print("[EPOCH "+str(epoch)+"]","Val_loss: ", val_loss)
 
             if epoch > 49 and val_loss < best_val_loss:
 
@@ -508,13 +586,13 @@ def train_model(test_name, train_bool,
                 best_val_loss = val_loss
                 print('Saving best val_loss model at epoch',epoch," with loss: ",val_loss)
 
-            if epoch > 49 and val_acc > best_val_acc:
+            if epoch > 49 and val_rel_err < best_val_rel_err:
 
-                torch.save(model.state_dict(), save_path + 'best_valAcc_model.pth')
+                torch.save(model.state_dict(), save_path + 'best_valRelerr_model.pth')
                 torch.save(optimizer.state_dict(), save_path + 'state_dict_optimizer.op')
                 
-                best_val_acc = val_acc
-                print('Saving best val_acc model at epoch: ',epoch," with acc: ",val_acc)
+                best_val_rel_err = val_rel_err
+                print('Saving best val_rel_err model at epoch: ',epoch," with rel err: ",val_rel_err)
 
             if epoch % 50 == 0:
 
@@ -526,12 +604,12 @@ def train_model(test_name, train_bool,
     model.eval()
     
     with torch.no_grad():
-        test_loss, test_acc = evaluate_model(model, test_loader) 
+        test_loss, test_rel_err = evaluate_model(model, test_loader) 
 
     ret_dict["losses"]["loss_test"].append(test_loss) #a point
-    ret_dict["acc"]["acc_test"].append(test_acc) #a point
+    ret_dict["rel_err"]["rel_err_test"].append(test_rel_err) #a point
 
-    print("[TEST] ","test_loss", test_loss, "test_acc", test_acc)
+    print("[TEST] ","test_loss", test_loss, "test_rel_err", test_rel_err)
 
     
     print('\n#----------------------#\n#   Process Completed  #\n#----------------------#\n\n')
@@ -542,22 +620,12 @@ def train_model(test_name, train_bool,
 
 
 
-def main():
-
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('--gpu', type=str, required=True)
-
-    parser.add_argument('--do_test', action='store_true')
-
-    parser.add_argument('--do_debug', action='store_true')
-
-    args = parser.parse_args()
+def main_1d(args):
     
     debug = args.do_debug
 
     device = args.gpu
-    #device = hardware_check()
+    device = hardware_check()
 
 
     os.environ["CUDA_VISIBLE_DEVICES"] = device
@@ -643,7 +711,124 @@ def main():
     #print (var.__getitem__(0))
     
 
+def main_2d(args):
+    
+    print(args)
 
+    debug = args.do_debug
+
+    device = args.gpu
+    device = hardware_check()
+
+
+    os.environ["CUDA_VISIBLE_DEVICES"] = device
+ 
+    print("GPU IN USO: ", device)
+
+    # Seed #
+
+    seed = 0
+
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+    torch.manual_seed(seed)
+
+    torch.cuda.manual_seed(seed)
+
+    ####### ARGS
+
+    os.makedirs("results", exist_ok=True)
+
+    test_name = f'{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_test'
+
+    train_bool = not args.do_test
+
+    print("train_bool",train_bool)
+
+    input_shape = (3, 362, 512)
+
+    train_val_split = 0.1
+
+    train_test_split = 0.2
+
+    lr = 1e-5
+
+    epoch = 100
+
+    debug = debug
+    
+    env_path = "./" #project/work on docker
+
+    data_path = "./data"
+
+    trained_net_path = ""
+
+    data_path = args.dataset_path
+
+    output_var = args.output_var
+
+    transform = args.transform
+
+    train_data_loader, val_data_loader, test_data_loader = collect_data_2D(data_path=data_path, transform = transform, device = device, output_var= output_var, train_test_split=train_test_split, train_val_split=train_val_split, mode=args.mode)
+
+    # Train model
+
+    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, env_path, device, trained_net_path, debug)
+ 
+    
+    """
+    # Usage example of Dataset_1D_raw 
+
+    csv_file = "AirQuality.csv"
+
+    device = "cpu"
+    var = Dataset_1D_raw(csv_file=csv_file, device=device)
+    print (var.__getitem__(0))
+
+    train_test_split = 0.2
+    train_val_split = 0.1
+    train_data_loader, val_data_loader, test_data_loader = collect_data_1D(csv_file=csv_file, device = device, train_test_split=train_test_split, train_val_split=train_val_split)
+
+    
+    
+    print ("Each input has shape: ", var.__getitem__(0)[0].shape)
+    num_input_channels = 1 # [batch, channel=1, h=12, w=168]
+    model = StackedLinear(num_input_channels) 
+    output = model(next(iter(train_data_loader))[0])
+    print (output)
+
+
+
+    #var = Dataset_2D(data_path=data_path, transform="morlet", device=device, output_var="CO(GT)", istrain=True)
+    #print (var.__getitem__(0))
+    """
+
+
+def main():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('dim', choices=["1D", "2D"])
+
+    parser.add_argument('--dataset_path', type=str, required=True)
+
+    parser.add_argument('--output_var', type=str, required=True)
+
+    parser.add_argument('--transform', type=str, required=True)
+
+    parser.add_argument('--gpu', type=str, required=True)
+
+    parser.add_argument('--do_test', action='store_true')
+
+    parser.add_argument('--do_debug', action='store_true')
+
+    parser.add_argument('--mode', choices=["regression", "forecasting_simple", "forecasting_advanced"], default="forecasting_advanced")
+
+    args = parser.parse_args()
+
+    if args.dim == "1D":
+        main_1d(args)
+    elif args.dim == "2D":
+        main_2d(args)
 
 
 if __name__ == '__main__':

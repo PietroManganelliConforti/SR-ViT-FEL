@@ -34,42 +34,6 @@ class DeviceDataLoader():
     def __len__(self):
         """Number of batches"""
         return len(self.dl)
-    
-
-def save_plot_loss_or_acc(info_dict, path, test_name):
-    """
-
-    info_dict = {
-                "losses" : {
-                    "S_loss" : [],
-                    "T_Dist_loss" : [],
-                    "KD_train" : [],
-                    "XAI_train" : [],
-                    "TOT_train" : [],
-                    "TOT_eval" : []
-                },
-                "acc" : {
-                    "acc_train":[],
-                    "acc_test":[]
-                }
-            }
-
-    """
-
-    for i in info_dict.keys():
-        plt.plot(info_dict[i], '-x', label=i)
-
-    plt.legend()
-    plt.xlabel('epoch')
-    plt.ylabel('loss')
-    plt.title('Accuracy vs. No. of epochs')
-
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-    plt.savefig(path+test_name+".png")
-    plt.clf()
-    plt.close()
 
 
 
@@ -80,10 +44,10 @@ def inizialize_ret_dict():
             "loss_eval" : [],
             "loss_test" : []
         },
-        "acc" : {
-            "acc_train":[],
-            "acc_eval":[],
-            "acc_test":[]   
+        "rel_err" : {
+            "rel_err_train":[],
+            "rel_err_eval":[],
+            "rel_err_test":[]   
         }
     }
     return ret
@@ -97,20 +61,20 @@ def accuracy(outputs, labels):
 def evaluate_model(model, loader):
 
     loss = 0
-    acc = 0
+    rel_err = 0
 
     for batch in loader:
         images, labels = batch
         out = model(images)
 
-        acc += accuracy(out,labels)
         loss += torch.nn.functional.mse_loss(out, labels)
+        rel_err += ((out - labels) / labels).abs().mean()
 
-    return (loss/len(loader)).item(), (acc/len(loader)).item()
+    return (loss/len(loader)).item(), (rel_err/len(loader)).item()
 
 
 
-def save_plot_loss_or_acc(info_dict, path, test_name):
+def save_plot_loss_or_rel_err(info_dict, path, test_name):
     """
         ret = {
             "losses" : {
@@ -155,12 +119,12 @@ def save_plots_and_report(ret_dict, save_path, test_name):
     ret_str ="loss_train: " + str(ret_dict["losses"]["loss_train"][-1:])
     ret_str +="\n\nloss_eval: " + str(ret_dict["losses"]["loss_eval"][-1:]) 
     ret_str +="\n\nloss_test: " + str(ret_dict["losses"]["loss_test"][-1:]) 
-    ret_str +="\n\nacc_train " + str(ret_dict["acc"]["acc_train"][-1:])
-    ret_str +="\n\nacc_eval: " + str(ret_dict["acc"]["acc_eval"][-1:]) 
-    ret_str +="\n\nacc_test: " + str(ret_dict["acc"]["acc_test"][-1:]) 
+    ret_str +="\n\nrel_err_train " + str(ret_dict["rel_err"]["rel_err_train"][-1:])
+    ret_str +="\n\nrel_err_eval: " + str(ret_dict["rel_err"]["rel_err_eval"][-1:]) 
+    ret_str +="\n\nrel_err_test: " + str(ret_dict["rel_err"]["rel_err_test"][-1:]) 
 
-    with open(save_path+'RESULTS_'+ test_name +'.txt', 'w+') as f:
+    with open(save_path+test_name +'.txt', 'w+') as f:
         f.write(test_name + "\n\n"+ ret_str + '\n\nret dict:\n' + str(ret_dict))
 
-    save_plot_loss_or_acc( ret_dict["losses"], path = save_path + "/loss/" , test_name = "loss" )
-    save_plot_loss_or_acc( ret_dict["acc"], path = save_path + "/acc/" , test_name = "acc" )
+    save_plot_loss_or_rel_err( ret_dict["losses"], path = save_path + "/loss/" , test_name = "loss" )
+    save_plot_loss_or_rel_err( ret_dict["rel_err"], path = save_path + "/rel_err/" , test_name = "rel_err" )
