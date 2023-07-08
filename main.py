@@ -739,7 +739,7 @@ def main_2d(args):
 
     os.makedirs("results", exist_ok=True)
 
-    test_name = f'{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_test'
+    test_name = f'{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_test'
 
     train_bool = not args.do_test
 
