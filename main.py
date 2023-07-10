@@ -195,7 +195,7 @@ class Dataset_1D(torch.utils.data.Dataset):
 
 
 class Dataset_1D_raw(torch.utils.data.Dataset):
-    def __init__(self, csv_file, device, window_size=168, step=6, window_discard_ratio=0.2, mode="forecasting_simple"):
+    def __init__(self, data_path, csv_file, device, window_size=168, step=6, window_discard_ratio=0.2, mode="forecasting_simple"):
 
         assert step <= window_size
         assert mode in {"forecasting_simple", "forecasting_advanced", "regression"}
@@ -217,21 +217,26 @@ class Dataset_1D_raw(torch.utils.data.Dataset):
             
 
         if (mode == "forecasting_simple"):
-            column = "forelabels"
-            # Labe/Output
-            label_file = "fore_labelsBASELINECO"
-            f = open(label_file, "r")
-            outputs = f.readlines()
-            f.close()
-            output = [float(str(elem)) for elem in outputs]
-        else:
+            label_file = "fore_simple_labels.txt"
+            
+        elif (mode == "forecasting_advanced"):
+            label_file = "fore_advanced_labels.txt"
+
+        # INPUT NEED TO BE FIXED FOR regr_labels 
+        elif (mode == "regression"):
+            #label_file = "regr_labels.txt"
             pass
+
+        column = "forelabels"
+        f = open(os.path.join(data_path, label_file), "r")
+        outputs = f.readlines()
+        f.close()
+        output = [float(str(elem)) for elem in outputs]
         
 
         
         input_stack, num_samples = self.preprocess_windows (input_variables)
 
-        assert num_samples == len(output)
 
         self.input = input_stack # stack of windows
         self.output = output # dictionary of list of values 
@@ -239,6 +244,7 @@ class Dataset_1D_raw(torch.utils.data.Dataset):
         self.window_size = window_size
         self.step = step
         self.device = device
+        self.mode = mode
 
     def create_windows (self, list_of_values, window_size, step):
         windows = []
@@ -282,7 +288,12 @@ class Dataset_1D_raw(torch.utils.data.Dataset):
         return stack, stack.shape[0]
 
     def __len__(self):
-        return self.num_samples
+
+        if self.mode == "forecasting_simple" or self.mode == "forecasting_advanced": return self.num_samples - 1
+
+        if self.mode == "regression": return self.num_samples
+
+        raise Exception()
         
     def __getitem__(self, idx):
 
@@ -304,9 +315,9 @@ class Dataset_1D_raw(torch.utils.data.Dataset):
 
 
 
-def collect_data_1D(csv_file, device, train_test_split, train_val_split, mode): 
+def collect_data_1D(data_path, csv_file, device, train_test_split, train_val_split, mode): 
 
-    dataset = Dataset_1D_raw(csv_file=csv_file, device=device, mode=mode)
+    dataset = Dataset_1D_raw(data_path, csv_file=csv_file, device=device, mode=mode)
                                                                  
     print(f'\nNumero di Training samples: {len(dataset)}')
 
@@ -387,10 +398,11 @@ class Dataset_2D(torch.utils.data.Dataset):
         elif (mode == "forecasting_advanced"):
             label_file = os.path.join(self.data_path, self.output_var,"fore_advanced_labels.txt")
 
-
+        # INPUT NEED TO BE FIXED FOR regr_labels 
         elif (mode == "regression"):
-            label_file = os.path.join(self.data_path, self.output_var,"regr_labels.txt")
-            
+            #label_file = os.path.join(self.data_path, self.output_var,"regr_labels.txt")
+            pass 
+
         f = open(label_file, "r")
         outputs = f.readlines()
         f.close()
@@ -661,39 +673,12 @@ def main_1d(args):
 
     trained_net_path = ""
 
-    train_data_loader, val_data_loader, test_data_loader = collect_data_1D(csv_file="AirQuality.csv", device = device, train_test_split=train_test_split, train_val_split=train_val_split, mode=args.mode)
+    train_data_loader, val_data_loader, test_data_loader = collect_data_1D(data_path=args.dataset_path, csv_file="AirQuality.csv", device = device, train_test_split=train_test_split, train_val_split=train_val_split, mode=args.mode)
 
     # Train model
 
     train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, env_path, device, args.dim, trained_net_path, debug)
- 
-    
-    """
-    # Usage example of Dataset_1D_raw 
 
-    csv_file = "AirQuality.csv"
-
-    device = "cpu"
-    var = Dataset_1D_raw(csv_file=csv_file, device=device)
-    print (var.__getitem__(0))
-
-    train_test_split = 0.2
-    train_val_split = 0.1
-    train_data_loader, val_data_loader, test_data_loader = collect_data_1D(csv_file=csv_file, device = device, train_test_split=train_test_split, train_val_split=train_val_split, mode=args.mode)
-
-    
-    
-    print ("Each input has shape: ", var.__getitem__(0)[0].shape)
-    num_input_channels = 1 # [batch, channel=1, h=12, w=168]
-    model = StackedLinear(num_input_channels) 
-    output = model(next(iter(train_data_loader))[0])
-    print (output)
-
-
-
-    #var = Dataset_2D(data_path=data_path, transform="morlet", device=device, output_var="CO(GT)", istrain=True)
-    #print (var.__getitem__(0))
-    """
 
 def main_2d(args):
     
@@ -758,34 +743,6 @@ def main_2d(args):
     # Train model
 
     train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, env_path, device, args.dim, trained_net_path, debug)
- 
-    
-    """
-    # Usage example of Dataset_1D_raw 
-
-    csv_file = "AirQuality.csv"
-
-    device = "cpu"
-    var = Dataset_1D_raw(csv_file=csv_file, device=device)
-    print (var.__getitem__(0))
-
-    train_test_split = 0.2
-    train_val_split = 0.1
-    train_data_loader, val_data_loader, test_data_loader = collect_data_1D(csv_file=csv_file, device = device, train_test_split=train_test_split, train_val_split=train_val_split)
-
-    
-    
-    print ("Each input has shape: ", var.__getitem__(0)[0].shape)
-    num_input_channels = 1 # [batch, channel=1, h=12, w=168]
-    model = StackedLinear(num_input_channels) 
-    output = model(next(iter(train_data_loader))[0])
-    print (output)
-
-
-
-    #var = Dataset_2D(data_path=data_path, transform="morlet", device=device, output_var="CO(GT)", istrain=True)
-    #print (var.__getitem__(0))
-    """
 
 
 def main():
