@@ -381,32 +381,22 @@ class Dataset_2D(torch.utils.data.Dataset):
         self.output_var = output_var
 
         if (mode == "forecasting_simple"):
-
-            # Labe/Output
             label_file = os.path.join(self.data_path, self.output_var,"fore_simple_labels.txt")
-            f = open(label_file, "r")
-            outputs = f.readlines()
-            f.close()
 
-            self.labels = torch.tensor([float(output.strip()) for output in outputs])
+
         elif (mode == "forecasting_advanced"):
-
-            # Labe/Output
             label_file = os.path.join(self.data_path, self.output_var,"fore_advanced_labels.txt")
-            f = open(label_file, "r")
-            outputs = f.readlines()
-            f.close()
 
-            self.labels = torch.tensor([float(output.strip()) for output in outputs])
+
         elif (mode == "regression"):
-
-            # Labe/Output
             label_file = os.path.join(self.data_path, self.output_var,"regr_labels.txt")
-            f = open(label_file, "r")
-            outputs = f.readlines()
-            f.close()
+            
+        f = open(label_file, "r")
+        outputs = f.readlines()
+        f.close()
 
-            self.labels = torch.tensor([float(output.strip()) for output in outputs])
+        self.labels = torch.tensor([float(output.strip()) for output in outputs])
+
 
         #self.classes = classes
 
