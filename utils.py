@@ -142,12 +142,13 @@ def save_plots_and_report(ret_dict, save_path, test_name, smooth= False):
 
     save_plot_loss_or_rel_err( ret_dict["losses"], n_of_elements ,path = save_path + "loss/" , test_name = "loss" , smooth= smooth)
     save_plot_loss_or_rel_err( ret_dict["rel_err"], n_of_elements ,path = save_path + "rel_err/" , test_name = "rel_err" , smooth= smooth)
-    
+
     if smooth:
         save_plot_loss_or_rel_err( ret_dict["losses"], n_of_elements ,path = save_path + "loss/" , test_name = "loss" , smooth= False)
         save_plot_loss_or_rel_err( ret_dict["rel_err"], n_of_elements ,path = save_path + "rel_err/" , test_name = "rel_err" , smooth= False)
 
 
+"""
 test_ret = {
             "losses" : {
                 "loss_train" : [5,40,3,20,1],
@@ -162,3 +163,4 @@ test_ret = {
         }
 
 save_plots_and_report(test_ret,"","da_canc", True)
+"""
