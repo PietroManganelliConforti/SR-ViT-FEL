@@ -195,10 +195,10 @@ class Dataset_1D(torch.utils.data.Dataset):
 
 
 class Dataset_1D_raw(torch.utils.data.Dataset):
-    def __init__(self, csv_file, device, window_size=168, step=6, window_discard_ratio=0.2, mode="forecasting"):
+    def __init__(self, data_path, csv_file, device, window_size=168, step=6, window_discard_ratio=0.2, mode="forecasting_simple"):
 
         assert step <= window_size
-        assert mode == "forecasting" or mode == "regression"
+        assert mode in {"forecasting_simple", "forecasting_advanced", "regression"}
 
         self.window_discard_ratio = window_discard_ratio
 
@@ -216,22 +216,27 @@ class Dataset_1D_raw(torch.utils.data.Dataset):
                 input_variables[column] = self.create_windows(input_variables[column], window_size, step)
             
 
-        if (mode == "forecasting"):
-            column = "forelabels"
-            # Labe/Output
-            label_file = "fore_labelsBASELINECO"
-            f = open(label_file, "r")
-            outputs = f.readlines()
-            f.close()
-            output = [float(str(elem)) for elem in outputs]
-        else:
+        if (mode == "forecasting_simple"):
+            label_file = "fore_simple_labels.txt"
+            
+        elif (mode == "forecasting_advanced"):
+            label_file = "fore_advanced_labels.txt"
+
+        # INPUT NEED TO BE FIXED FOR regr_labels 
+        elif (mode == "regression"):
+            #label_file = "regr_labels.txt"
             pass
+
+        column = "forelabels"
+        f = open(os.path.join(data_path, label_file), "r")
+        outputs = f.readlines()
+        f.close()
+        output = [float(str(elem)) for elem in outputs]
         
 
         
         input_stack, num_samples = self.preprocess_windows (input_variables)
 
-        assert num_samples == len(output)
 
         self.input = input_stack # stack of windows
         self.output = output # dictionary of list of values 
@@ -239,6 +244,7 @@ class Dataset_1D_raw(torch.utils.data.Dataset):
         self.window_size = window_size
         self.step = step
         self.device = device
+        self.mode = mode
 
     def create_windows (self, list_of_values, window_size, step):
         windows = []
@@ -282,7 +288,12 @@ class Dataset_1D_raw(torch.utils.data.Dataset):
         return stack, stack.shape[0]
 
     def __len__(self):
-        return self.num_samples
+
+        if self.mode == "forecasting_simple" or self.mode == "forecasting_advanced": return self.num_samples - 1
+
+        if self.mode == "regression": return self.num_samples
+
+        raise Exception()
         
     def __getitem__(self, idx):
 
@@ -304,9 +315,9 @@ class Dataset_1D_raw(torch.utils.data.Dataset):
 
 
 
-def collect_data_1D(csv_file, device, train_test_split, train_val_split): 
+def collect_data_1D(data_path, csv_file, device, train_test_split, train_val_split, mode): 
 
-    dataset = Dataset_1D_raw(csv_file=csv_file, device=device)
+    dataset = Dataset_1D_raw(data_path, csv_file=csv_file, device=device, mode=mode)
                                                                  
     print(f'\nNumero di Training samples: {len(dataset)}')
 
@@ -381,32 +392,23 @@ class Dataset_2D(torch.utils.data.Dataset):
         self.output_var = output_var
 
         if (mode == "forecasting_simple"):
-
-            # Labe/Output
             label_file = os.path.join(self.data_path, self.output_var,"fore_simple_labels.txt")
-            f = open(label_file, "r")
-            outputs = f.readlines()
-            f.close()
 
-            self.labels = torch.tensor([float(output.strip()) for output in outputs])
+
         elif (mode == "forecasting_advanced"):
-
-            # Labe/Output
             label_file = os.path.join(self.data_path, self.output_var,"fore_advanced_labels.txt")
-            f = open(label_file, "r")
-            outputs = f.readlines()
-            f.close()
 
-            self.labels = torch.tensor([float(output.strip()) for output in outputs])
+        # INPUT NEED TO BE FIXED FOR regr_labels 
         elif (mode == "regression"):
+            #label_file = os.path.join(self.data_path, self.output_var,"regr_labels.txt")
+            pass 
 
-            # Labe/Output
-            label_file = os.path.join(self.data_path, self.output_var,"regr_labels.txt")
-            f = open(label_file, "r")
-            outputs = f.readlines()
-            f.close()
+        f = open(label_file, "r")
+        outputs = f.readlines()
+        f.close()
 
-            self.labels = torch.tensor([float(output.strip()) for output in outputs])
+        self.labels = torch.tensor([float(output.strip()) for output in outputs])
+
 
         #self.classes = classes
 
@@ -482,7 +484,7 @@ class Dataset_2D(torch.utils.data.Dataset):
 def train_model(test_name, train_bool, 
                  lr, epochs, train_data_loader, 
                  val_data_loader, test_data_loader,
-                 env_path, device, trained_net_path= "",
+                 env_path, device, dim, trained_net_path= "",
                  debug = False):
 
     
@@ -506,11 +508,15 @@ def train_model(test_name, train_bool,
 
     # Build model
 
-    model = torchvision.models.resnet34(pretrained=False, progress=True)
+    if (dim == '1D'):
+        num_input_channels = 1  # Number of stacked images in input 
+        model = StackedLinear(num_input_channels) 
 
-    num_input_channels = 12  # Number of stacked images in input 
-            
-    model = StackedResNet(num_input_channels, model) #da provare con la resnet freezata e più conv iniziali
+    elif (dim == '2D'):
+        model = torchvision.models.resnet34(pretrained=False, progress=True)
+
+        num_input_channels = 12  # Number of stacked images in input 
+        model = StackedResNet(num_input_channels, model) #da provare con la resnet freezata e più conv iniziali
 
 
     model = model.to(device)
@@ -621,7 +627,8 @@ def train_model(test_name, train_bool,
 
 
 def main_1d(args):
-    
+    print(args)
+
     debug = args.do_debug
 
     device = args.gpu
@@ -642,17 +649,15 @@ def main_1d(args):
 
     torch.cuda.manual_seed(seed)
 
-    """
-
     ####### ARGS
+    
+    os.makedirs("results", exist_ok=True)
 
-    test_name = 'Test_name3'
+    test_name = f'{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_test'
 
     train_bool = not args.do_test
 
     print("train_bool",train_bool)
-
-    input_shape = (3, 362, 512)
 
     train_val_split = 0.1
 
@@ -666,50 +671,14 @@ def main_1d(args):
     
     env_path = "./" #project/work on docker
 
-    data_path = "./data"
-
     trained_net_path = ""
 
-    data_path = "2D_datasets/2D_scale_step_large"
-
-    output_var = "CO(GT)"
-
-    transform = "morlet2"
-
-    train_data_loader, val_data_loader, test_data_loader = collect_data_2D(data_path=data_path, transform = transform, device = device, output_var= output_var, train_test_split=train_test_split, train_val_split=train_val_split)
+    train_data_loader, val_data_loader, test_data_loader = collect_data_1D(data_path=args.dataset_path, csv_file="AirQuality.csv", device = device, train_test_split=train_test_split, train_val_split=train_val_split, mode=args.mode)
 
     # Train model
 
-    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, env_path, trained_net_path, debug)
- 
-    """
-    
+    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, env_path, device, args.dim, trained_net_path, debug)
 
-    # Usage example of Dataset_1D_raw 
-
-    csv_file = "AirQuality.csv"
-
-    device = "cpu"
-    var = Dataset_1D_raw(csv_file=csv_file, device=device)
-    print (var.__getitem__(0))
-
-    train_test_split = 0.2
-    train_val_split = 0.1
-    train_data_loader, val_data_loader, test_data_loader = collect_data_1D(csv_file=csv_file, device = device, train_test_split=train_test_split, train_val_split=train_val_split)
-
-    
-    
-    print ("Each input has shape: ", var.__getitem__(0)[0].shape)
-    num_input_channels = 1 # [batch, channel=1, h=12, w=168]
-    model = StackedLinear(num_input_channels) 
-    output = model(next(iter(train_data_loader))[0])
-    print (output)
-
-
-
-    #var = Dataset_2D(data_path=data_path, transform="morlet", device=device, output_var="CO(GT)", istrain=True)
-    #print (var.__getitem__(0))
-    
 
 def main_2d(args):
     
@@ -773,35 +742,7 @@ def main_2d(args):
 
     # Train model
 
-    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, env_path, device, trained_net_path, debug)
- 
-    
-    """
-    # Usage example of Dataset_1D_raw 
-
-    csv_file = "AirQuality.csv"
-
-    device = "cpu"
-    var = Dataset_1D_raw(csv_file=csv_file, device=device)
-    print (var.__getitem__(0))
-
-    train_test_split = 0.2
-    train_val_split = 0.1
-    train_data_loader, val_data_loader, test_data_loader = collect_data_1D(csv_file=csv_file, device = device, train_test_split=train_test_split, train_val_split=train_val_split)
-
-    
-    
-    print ("Each input has shape: ", var.__getitem__(0)[0].shape)
-    num_input_channels = 1 # [batch, channel=1, h=12, w=168]
-    model = StackedLinear(num_input_channels) 
-    output = model(next(iter(train_data_loader))[0])
-    print (output)
-
-
-
-    #var = Dataset_2D(data_path=data_path, transform="morlet", device=device, output_var="CO(GT)", istrain=True)
-    #print (var.__getitem__(0))
-    """
+    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, env_path, device, args.dim, trained_net_path, debug)
 
 
 def main():
