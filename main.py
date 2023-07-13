@@ -9,7 +9,9 @@ import pandas as pd
 from natsort import natsorted
 import cv2
 from StackedResnet import StackedResNet
-from StackedLinear import StackedLinear
+from StackedLinear import Stacked2DLinear, Stacked1DLinear
+from torchsummary import summary
+
 
 def collect_data_2D(data_path , transform, device, output_var, train_test_split, train_val_split, mode): 
 
@@ -195,7 +197,7 @@ class Dataset_1D(torch.utils.data.Dataset):
 
 
 class Dataset_1D_raw(torch.utils.data.Dataset):
-    def __init__(self, data_path, csv_file, device, window_size=168, step=6, window_discard_ratio=0.2, mode="forecasting_simple"):
+    def __init__(self, data_path, csv_file, device, window_size=168, step=6, window_discard_ratio=0.2, output_var="CO(GT)", mode="forecasting_simple"):
 
         assert step <= window_size
         assert mode in {"forecasting_simple", "forecasting_advanced", "regression"}
@@ -224,11 +226,12 @@ class Dataset_1D_raw(torch.utils.data.Dataset):
 
         # INPUT NEED TO BE FIXED FOR regr_labels 
         elif (mode == "regression"):
-            #label_file = "regr_labels.txt"
             pass
+            #label_file = "regr_labels.txt"
+            #input_variables.pop(output_var)            
 
         column = "forelabels"
-        f = open(os.path.join(data_path, label_file), "r")
+        f = open(os.path.join(data_path, output_var, label_file), "r")
         outputs = f.readlines()
         f.close()
         output = [float(str(elem)) for elem in outputs]
@@ -296,7 +299,6 @@ class Dataset_1D_raw(torch.utils.data.Dataset):
         raise Exception()
         
     def __getitem__(self, idx):
-
         input_windows = torch.FloatTensor(np.array(self.input[idx])).unsqueeze(0).to(self.device) # [channel=1, h=12, w=168]
         output = torch.tensor(float(self.output[idx])).to(self.device)
         
@@ -315,9 +317,9 @@ class Dataset_1D_raw(torch.utils.data.Dataset):
 
 
 
-def collect_data_1D(data_path, csv_file, device, train_test_split, train_val_split, mode): 
+def collect_data_1D(data_path, csv_file, device, train_test_split, train_val_split, output_var, mode): 
 
-    dataset = Dataset_1D_raw(data_path, csv_file=csv_file, device=device, mode=mode)
+    dataset = Dataset_1D_raw(data_path, csv_file=csv_file, device=device, output_var=output_var, mode=mode)
                                                                  
     print(f'\nNumero di Training samples: {len(dataset)}')
 
@@ -328,9 +330,9 @@ def collect_data_1D(data_path, csv_file, device, train_test_split, train_val_spl
     print(f'There are: {len(train_dataset)} training samples, {len(val_dataset)} validation samples and {len(test_dataset)} test samples')
 
     # create dataloaders
-    train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=1, shuffle=True, num_workers=1)
-    val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=True, num_workers=1)
-    test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=1)
+    train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=1)
+    val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=16, shuffle=True, num_workers=1)
+    test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=16, shuffle=False, num_workers=1)
 
     return train_data_loader, val_data_loader, test_data_loader
 
@@ -484,7 +486,7 @@ class Dataset_2D(torch.utils.data.Dataset):
 def train_model(test_name, train_bool, 
                  lr, epochs, train_data_loader, 
                  val_data_loader, test_data_loader,
-                 env_path, device, dim, trained_net_path= "",
+                 env_path, device, dim, mode, transform, trained_net_path= "",
                  debug = False):
 
     
@@ -509,9 +511,13 @@ def train_model(test_name, train_bool,
     # Build model
 
     if (dim == '1D'):
-        num_input_channels = 1  # Number of stacked images in input 
-        model = StackedLinear(num_input_channels) 
-
+        # In 1D args.transform is equal to the architecture name
+        if (transform == "Stacked1DLinear"):
+            num_input_channels = 12
+            model = Stacked1DLinear(num_input_channels, mode) 
+        elif (transform == "Stacked2DLinear"):
+            num_input_channels = 1  # Number of stacked images in input 
+            model = Stacked2DLinear(num_input_channels, mode) 
     elif (dim == '2D'):
         model = torchvision.models.resnet34(pretrained=False, progress=True)
 
@@ -520,6 +526,7 @@ def train_model(test_name, train_bool,
 
 
     model = model.to(device)
+    #summary(model, (1, 12, 168))
 
     if trained_net_path != "":
         print("Loading model state dict from ", trained_net_path)
@@ -673,11 +680,11 @@ def main_1d(args):
 
     trained_net_path = ""
 
-    train_data_loader, val_data_loader, test_data_loader = collect_data_1D(data_path=args.dataset_path, csv_file="AirQuality.csv", device = device, train_test_split=train_test_split, train_val_split=train_val_split, mode=args.mode)
+    train_data_loader, val_data_loader, test_data_loader = collect_data_1D(data_path=args.dataset_path, csv_file="AirQuality.csv", device = device, train_test_split=train_test_split, train_val_split=train_val_split, output_var=args.output_var, mode=args.mode)
 
     # Train model
 
-    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, env_path, device, args.dim, trained_net_path, debug)
+    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, env_path, device, args.dim, args.mode, args.transform, trained_net_path, debug)
 
 
 def main_2d(args):
@@ -742,7 +749,7 @@ def main_2d(args):
 
     # Train model
 
-    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, env_path, device, args.dim, trained_net_path, debug)
+    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, env_path, device, args.dim, args.mode, args.transform, trained_net_path, debug)
 
 
 def main():
