@@ -99,7 +99,7 @@ def save_plot_loss_or_rel_err(info_dict, n_of_elements, path, test_name, smooth=
                 plt.plot(n_of_elements - 1, info_dict[k], '-x', label=k)   #per posizionare il test in fondo 
         
         else:
-            if smooth:
+            if smooth and len(info_dict[k]) > 1:
                 idx= range(n_of_elements) 
                 spl = make_interp_spline(idx, info_dict[k], k=3)
                 xnew = np.linspace(min(idx), max(idx), 300)
@@ -165,3 +165,4 @@ test_ret = {
 
 save_plots_and_report(test_ret,"","da_canc", True)
 """
+
