@@ -574,7 +574,8 @@ def train_model(test_name, train_bool,
             for images, labels in train_loader:
 
                 #print(images.shape)
-
+                images = images.to(device)
+                labels = labels.to(device)
                 out = model(images) 
                 optimizer.zero_grad()
                 out = torch.squeeze(out)
@@ -596,7 +597,7 @@ def train_model(test_name, train_bool,
             
             with torch.no_grad():
 
-                val_loss, val_rel_err = evaluate_model(model, val_loader) 
+                val_loss, val_rel_err = evaluate_model(model, val_loader,device) 
 
                 ret_dict["losses"]["loss_eval"].append(val_loss) 
                 ret_dict["rel_err"]["rel_err_eval"].append(val_rel_err) 
@@ -629,7 +630,7 @@ def train_model(test_name, train_bool,
     model.eval()
     
     with torch.no_grad():
-        test_loss, test_rel_err = evaluate_model(model, test_loader) 
+        test_loss, test_rel_err = evaluate_model(model, test_loader,device) 
 
     ret_dict["losses"]["loss_test"].append(test_loss) #a point
     ret_dict["rel_err"]["rel_err_test"].append(test_rel_err) #a point

@@ -59,13 +59,15 @@ def accuracy(outputs, labels):
     return torch.tensor(torch.sum(preds == labels).item() / len(preds))
 
 
-def evaluate_model(model, loader):
+def evaluate_model(model, loader,device):
 
     loss = 0
     rel_err = 0
 
     for batch in loader:
         images, labels = batch
+        images = images.to(device)
+        labels = labels.to(device)
         out = model(images)
         out = torch.squeeze(out)
         loss += torch.nn.functional.mse_loss(out, labels)
