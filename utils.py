@@ -67,7 +67,7 @@ def evaluate_model(model, loader):
     for batch in loader:
         images, labels = batch
         out = model(images)
-
+        out = torch.squeeze(out)
         loss += torch.nn.functional.mse_loss(out, labels)
         rel_err += ((out - labels) / labels).abs().mean()
 
