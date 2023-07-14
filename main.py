@@ -1,4 +1,5 @@
 import os
+from matplotlib import transforms as tr
 import torchvision
 import numpy as np
 from tqdm import trange
@@ -11,23 +12,31 @@ import cv2
 from StackedResnet import StackedResNet
 from StackedLinear import StackedLinear
 
-def collect_data_2D(data_path , transform, device, output_var, train_test_split, train_val_split, mode): 
 
+class Normalize(object): # not used anymore
+    def __init__(self, mean=[0 for i in range(12)], std=[1 for i in range(12)]):
+        self.std = std
+        self.mean = mean
+        
+    def __call__(self, tensor):
+
+        for i in range(len(tensor)):
+          
+          tensor[i] = (tensor[i] - self.mean[i])/self.std[i]
+
+        return tensor
+
+def collect_data_2D(data_path , transform, device, output_var, train_test_split, train_val_split, mode, batch_size): 
+
+
+
+    # preprocess = tr.Compose([
+    #                             Normalize(0,1)
+    #                         ])
+
+    preprocess = None
     
-    dataset = Dataset_2D(data_path=data_path, transform=transform, device=device, output_var=output_var, mode=mode)
-
-    #test_dataset = Dataset_2D(data_path="2D_datasets/2D_scale_step_large", transform="morlet", device=device, output_var="CO(GT)", istrain=True)
-
-    """
-    train_dataset = torchvision.datasets.FGVCAircraft(root=data_path, split='trainval', transform=torchvision.transforms.Compose([torchvision.transforms.Resize((input_shape[1], input_shape[2]), antialias=True),
-                                                                                                                                    torchvision.transforms.AutoAugment(),
-                                                                                                                                    torchvision.transforms.ToTensor(),                                                                                                                                
-                                                                                                                                    torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])]), download=True)
-    
-    test_dataset = torchvision.datasets.FGVCAircraft(root=data_path, split='test', transform=torchvision.transforms.Compose([torchvision.transforms.Resize((input_shape[1], input_shape[2]), antialias=True),
-                                                                                                                               torchvision.transforms.ToTensor(),
-                                                                                                                               torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])]), download=True)
-    """
+    dataset = Dataset_2D(data_path=data_path, transform=transform, device=device, output_var=output_var, mode=mode, preprocess=preprocess)
 
     print(f'\nNumero di Training samples: {len(dataset)}')
 
@@ -38,9 +47,9 @@ def collect_data_2D(data_path , transform, device, output_var, train_test_split,
     print(f'Ther are: {len(train_dataset)} training samples, {len(val_dataset)} validation samples and {len(test_dataset)} test samples')
 
     # create dataloaders
-    train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=1)
-    val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=16, shuffle=True, num_workers=1)
-    test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=16, shuffle=False, num_workers=1)
+    train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=1)
+    val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=1)
+    test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
 
     return train_data_loader, val_data_loader, test_data_loader
 
@@ -338,7 +347,7 @@ def collect_data_1D(data_path, csv_file, device, train_test_split, train_val_spl
 # We need to return a stack of variables that will fed as input into the CNN + output
 # TO DO: insert the output, modify input variable names and insert new arguments in dataset2_D
 class Dataset_2D(torch.utils.data.Dataset):
-    def __init__(self, data_path, transform, device, output_var, mode="regression"):
+    def __init__(self, data_path, transform, device, output_var, mode="regression", preprocess=None):
         
         assert mode in {"forecasting_simple", "forecasting_advanced", "regression"}
         
@@ -390,6 +399,7 @@ class Dataset_2D(torch.utils.data.Dataset):
         self.mode = mode
         self.data_path = data_path
         self.output_var = output_var
+        self.preprocess = preprocess
 
         if (mode == "forecasting_simple"):
             label_file = os.path.join(self.data_path, self.output_var,"fore_simple_labels.txt")
@@ -430,6 +440,9 @@ class Dataset_2D(torch.utils.data.Dataset):
 
         input = torch.tensor(np.array(windows)) #.to(self.device)
         output = self.labels[idx] #.to(self.device)
+
+        if self.preprocess is not None:
+            input = self.preprocess(input)
 
         # if (self.mode == "forecasting_simple"):
         #     input = torch.tensor(np.array(windows)) #.to(self.device)
@@ -551,18 +564,19 @@ def train_model(test_name, train_bool,
             train_loss = 0
             train_rel_err = 0
 
-            for images, labels in tqdm.tqdm(train_loader):
+            for images, labels in train_loader:
 
                 #print(images.shape)
 
                 out = model(images) 
                 optimizer.zero_grad()
-                loss = torch.nn.functional.mse_loss(out, labels)
+                out = torch.squeeze(out)
+                print(out.shape, labels.shape)
+                loss = torch.nn.functional.mse_loss(out, labels) #torch.squeeze?
                 loss.backward()
                 optimizer.step()
                 train_loss += loss.item()
 
-                _, preds = torch.max(out, dim=1)
                 rel_err = ((out - labels) / labels).abs().mean()
                 train_rel_err += rel_err.item()
 
@@ -576,8 +590,6 @@ def train_model(test_name, train_bool,
             with torch.no_grad():
 
                 val_loss, val_rel_err = evaluate_model(model, val_loader) 
-
-                print(val_loss)
 
                 ret_dict["losses"]["loss_eval"].append(val_loss) 
                 ret_dict["rel_err"]["rel_err_eval"].append(val_rel_err) 
@@ -602,7 +614,7 @@ def train_model(test_name, train_bool,
 
             if epoch % 50 == 0:
 
-                save_plots_and_report(ret_dict, save_path, test_name)
+                save_plots_and_report(ret_dict, save_path, test_name, True)
     
 
     print('\n#----------------------#\n#     Test pahse       #\n#----------------------#\n\n')
@@ -621,7 +633,7 @@ def train_model(test_name, train_bool,
     print('\n#----------------------#\n#   Process Completed  #\n#----------------------#\n\n')
 
 
-    save_plots_and_report(ret_dict, save_path, test_name)
+    save_plots_and_report(ret_dict, save_path, test_name,True)
 
 
 
@@ -708,7 +720,7 @@ def main_2d(args):
 
     os.makedirs("results", exist_ok=True)
 
-    test_name = f'{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_test'
+    test_name = f'{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_{args.bs}test'
 
     train_bool = not args.do_test
 
@@ -738,7 +750,9 @@ def main_2d(args):
 
     transform = args.transform
 
-    train_data_loader, val_data_loader, test_data_loader = collect_data_2D(data_path=data_path, transform = transform, device = device, output_var= output_var, train_test_split=train_test_split, train_val_split=train_val_split, mode=args.mode)
+    batch_size = args.bs
+
+    train_data_loader, val_data_loader, test_data_loader = collect_data_2D(data_path=data_path, transform = transform, device = device, output_var= output_var, train_test_split=train_test_split, train_val_split=train_val_split, mode=args.mode, batch_size=batch_size)
 
     # Train model
 
@@ -763,6 +777,8 @@ def main():
     parser.add_argument('--do_debug', action='store_true')
 
     parser.add_argument('--mode', choices=["regression", "forecasting_simple", "forecasting_advanced"], default="forecasting_advanced")
+
+    parser.add_argument('--bs', type=int, default=4, help='batch size')
 
     args = parser.parse_args()
 
