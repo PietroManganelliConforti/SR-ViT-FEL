@@ -578,7 +578,7 @@ def train_model(test_name, train_bool,
                 out = model(images) 
                 optimizer.zero_grad()
                 out = torch.squeeze(out)
-                print(out.shape, labels.shape)
+                
                 loss = torch.nn.functional.mse_loss(out, labels) #torch.squeeze?
                 loss.backward()
                 optimizer.step()
