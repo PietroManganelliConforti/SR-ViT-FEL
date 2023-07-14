@@ -12,7 +12,7 @@ import cv2
 from StackedResnet import StackedResNet
 from StackedLinear import Stacked2DLinear, Stacked1DLinear
 from torchsummary import summary
-
+import time
 
 
 class Normalize(object): # not used anymore
@@ -499,7 +499,7 @@ class Dataset_2D(torch.utils.data.Dataset):
 def train_model(test_name, train_bool, 
                  lr, epochs, train_data_loader, 
                  val_data_loader, test_data_loader,
-                 env_path, device, dim, mode, transform, trained_net_path= "",
+                 res_path, device, dim, mode, transform, trained_net_path= "",
                  debug = False):
 
     
@@ -507,7 +507,7 @@ def train_model(test_name, train_bool,
 
     # Path
 
-    save_path = env_path + 'results/' + test_name + '/'
+    save_path = res_path + '/' + test_name + '/'
 
     if not os.path.exists(save_path):
         os.makedirs(save_path)
@@ -670,9 +670,15 @@ def main_1d(args):
 
     ####### ARGS
     
-    os.makedirs("results", exist_ok=True)
+    system_time = time.localtime()
 
-    test_name = f'{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_test'
+    system_time_string = time.strftime("%m_%d", system_time)
+
+    res_path = "results_"+system_time_string
+
+    os.makedirs(res_path, exist_ok=True)
+
+    test_name = f'{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_{args.bs}'
 
     train_bool = not args.do_test
 
@@ -687,8 +693,6 @@ def main_1d(args):
     epoch = 100
 
     debug = debug
-    
-    env_path = "./" #project/work on docker
 
     trained_net_path = ""
 
@@ -696,7 +700,7 @@ def main_1d(args):
 
     # Train model
 
-    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, env_path, device, args.dim, args.mode, args.transform, trained_net_path, debug)
+    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug)
 
 
 def main_2d(args):
@@ -706,6 +710,7 @@ def main_2d(args):
     debug = args.do_debug
 
     device = args.gpu
+
     device = hardware_check()
 
 
@@ -725,9 +730,15 @@ def main_2d(args):
 
     ####### ARGS
 
-    os.makedirs("results", exist_ok=True)
+    system_time = time.localtime()
 
-    test_name = f'{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_{args.bs}test'
+    system_time_string = time.strftime("%d_%m", system_time)
+
+    res_path = "results_"+system_time_string
+
+    os.makedirs(res_path, exist_ok=True)
+
+    test_name = f'{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_{args.bs}'
 
     train_bool = not args.do_test
 
@@ -741,11 +752,9 @@ def main_2d(args):
 
     lr = 1e-5
 
-    epoch = 100
+    epoch = 1
 
     debug = debug
-    
-    env_path = "./" #project/work on docker
 
     data_path = "./data"
 
@@ -763,7 +772,7 @@ def main_2d(args):
 
     # Train model
 
-    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, env_path, device, args.dim, args.mode, args.transform, trained_net_path, debug)
+    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug)
 
 
 def main():
