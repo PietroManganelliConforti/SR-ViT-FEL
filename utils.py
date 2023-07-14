@@ -12,51 +12,6 @@ def hardware_check():
 
     return device
 
-def to_device(data, device):
-    """Move tensor(s) to chosen device"""
-
-    if isinstance(data, (list,tuple)):
-        return [to_device(x, device) for x in data]
-    return data.to(device, non_blocking=True)
-
-
-class DeviceDataLoader():
-    """Wrap a dataloader to move data to a device"""
-
-    def __init__(self, dl, device):
-        self.dl = dl
-        self.device = device
-
-    def __iter__(self):
-        """Yield a batch of data after moving it to device"""
-        for b in self.dl:
-            yield to_device(b, self.device)
-
-    def __len__(self):
-        """Number of batches"""
-        return len(self.dl)
-
-
-
-def inizialize_ret_dict():
-    ret = {
-        "losses" : {
-            "loss_train" : [],
-            "loss_eval" : [],
-            "loss_test" : []
-        },
-        "rel_err" : {
-            "rel_err_train":[],
-            "rel_err_eval":[],
-            "rel_err_test":[]   
-        }
-    }
-    return ret
-
-
-def accuracy(outputs, labels):
-    _, preds = torch.max(outputs, dim=1)
-    return torch.tensor(torch.sum(preds == labels).item() / len(preds))
 
 
 def evaluate_model(model, loader,device):
@@ -64,12 +19,12 @@ def evaluate_model(model, loader,device):
     loss = 0
     rel_err = 0
 
-    for batch in loader:
-        images, labels = batch
+    for images, labels in loader:
         images = images.to(device)
         labels = labels.to(device)
         out = model(images)
-        out = torch.squeeze(out)
+        out*=12
+        out = torch.flatten(out)
         loss += torch.nn.functional.mse_loss(out, labels)
         rel_err += ((out - labels) / labels).abs().mean()
 
