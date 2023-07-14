@@ -559,10 +559,10 @@ def train_model(test_name, train_bool,
     if train_bool:
 
         print(f"Training for {epochs} epochs...")
+        optimizer = torch.optim.Adam(model.parameters(), lr, amsgrad=False)
 
         for epoch in range(epochs):
 
-            optimizer = torch.optim.Adam(model.parameters(), lr, amsgrad=False)
 
             # Training Phase
 
