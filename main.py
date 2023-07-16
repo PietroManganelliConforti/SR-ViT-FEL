@@ -58,7 +58,7 @@ def collect_data_2D(data_path , transform, device, output_var, train_test_split,
 
 
 
-def collect_data_1D(data_path, csv_file, device, train_test_split, train_val_split, output_var, mode): 
+def collect_data_1D(data_path, csv_file, device, train_test_split, train_val_split, output_var, mode, batch_size): 
 
     dataset = Dataset_1D_raw(data_path, csv_file=csv_file, device=device, output_var=output_var, mode=mode)
                                                                  
@@ -71,9 +71,9 @@ def collect_data_1D(data_path, csv_file, device, train_test_split, train_val_spl
     print(f'There are: {len(train_dataset)} training samples, {len(val_dataset)} validation samples and {len(test_dataset)} test samples')
 
     # create dataloaders
-    train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=1)
-    val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=16, shuffle=True, num_workers=1)
-    test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=16, shuffle=False, num_workers=1)
+    train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=1)
+    val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=1)
+    test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
 
     return train_data_loader, val_data_loader, test_data_loader
 
@@ -283,7 +283,7 @@ def main_1d(args):
 
     trained_net_path = ""
 
-    train_data_loader, val_data_loader, test_data_loader = collect_data_1D(data_path=args.dataset_path, csv_file="AirQuality.csv", device = device, train_test_split=train_test_split, train_val_split=train_val_split, output_var=args.output_var, mode=args.mode)
+    train_data_loader, val_data_loader, test_data_loader = collect_data_1D(data_path=args.dataset_path, csv_file="AirQuality.csv", device = device, train_test_split=train_test_split, train_val_split=train_val_split, output_var=args.output_var, mode=args.mode, batch_size=args.bs)
 
     # Train model
 

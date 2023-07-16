@@ -1,1 +1,0 @@
-python3 main.py 1D --dataset_path '2D_datasets/2D_scale_stop_small' --output_var 'CO(GT)' --transform 'Stacked1DLinear' --gpu 'False' --mode 'forecasting_simple'
