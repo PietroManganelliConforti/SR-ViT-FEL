@@ -23,7 +23,6 @@ def evaluate_model(model, loader,device):
         images = images.to(device)
         labels = labels.to(device)
         out = model(images)
-        out*=12
         out = torch.flatten(out)
         loss += torch.nn.functional.mse_loss(out, labels)
         rel_err += ((out - labels) / labels).abs().mean()

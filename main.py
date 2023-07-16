@@ -161,8 +161,6 @@ def train_model(test_name, train_bool,
                 images = images.to(device)
                 labels = labels.to(device)
 
-                labels /= 12
-
                 out = model(images) 
                 optimizer.zero_grad()
                 out = torch.flatten(out)             
