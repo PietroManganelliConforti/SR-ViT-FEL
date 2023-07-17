@@ -49,9 +49,9 @@ def collect_data_2D(data_path , transform, device, output_var, train_test_split,
     print(f'Ther are: {len(train_dataset)} training samples, {len(val_dataset)} validation samples and {len(test_dataset)} test samples')
 
     # create dataloaders
-    train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=min(batch_size,8))
-    val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=min(batch_size,8))
-    test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=min(batch_size,8))
+    train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=1)
+    val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=1)
+    test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
 
     return train_data_loader, val_data_loader, test_data_loader
 
@@ -117,6 +117,7 @@ def train_model(test_name, train_bool,
         model = torchvision.models.resnet34(pretrained=False, progress=True)
 
         num_input_channels = 12 - len(variables_to_drop)  # Number of stacked images in input 
+        print(num_input_channels)
         model = StackedResNet(num_input_channels, model) #da provare con la resnet freezata e più conv iniziali
 
 

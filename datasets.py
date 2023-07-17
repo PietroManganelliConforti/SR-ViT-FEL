@@ -269,9 +269,11 @@ class Dataset_2D(torch.utils.data.Dataset):
         for root, _, files in os.walk(data_path):
             
             transform_dir = root.split("/")[-1]
-            if transform_dir not in ["morlet", "morlet2", "ricker"]:
-                continue
+
+            if transform_dir not in ["morlet", "morlet2", "ricker"]: continue
+
             variable_dir = root.split("/")[-2]
+            
             if (variable_dir in variable_to_remove): continue
             
             for file in natsorted(files):
