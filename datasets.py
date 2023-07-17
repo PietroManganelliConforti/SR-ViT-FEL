@@ -267,15 +267,19 @@ class Dataset_2D(torch.utils.data.Dataset):
         windows = {}
         old_variable_dir = None
         for root, _, files in os.walk(data_path):
+            
+            transform_dir = root.split("/")[-1]
+            if transform_dir not in ["morlet", "morlet2", "ricker"]:
+                continue
+            variable_dir = root.split("/")[-2]
+            if (variable_dir in variable_to_remove): continue
+            
             for file in natsorted(files):
                 file_to_load = os.path.join(root, file)
-                transform_dir = root.split("/")[-1]
                 
+                #print(f'transform_dir: {transform_dir}')
+
                 if (transform_dir == transform):
-
-                    variable_dir = root.split("/")[-2]
-
-                    #if ( variable_dir in variable_to_remove): continue
 
                     # initialize idx of windows if we change variable, and initialize an empty dictionary if idx is not present in windows
 
@@ -291,7 +295,7 @@ class Dataset_2D(torch.utils.data.Dataset):
                     old_variable_dir = variable_dir
                     idx+=1
 
-
+        print(f'windows[0].keys(): {windows[list(windows.keys())[0]].keys()}')
         
         # split train/test sets
         # In forecasting the last element should be at idx "-2" so the output will be at idx = -1
