@@ -28,7 +28,7 @@ class Normalize(object): # not used anymore
 
         return tensor
 
-def collect_data_2D(data_path , transform, device, output_var, train_test_split, train_val_split, mode, batch_size, variables_to_drop): 
+def collect_data_2D(data_path , transform, device, output_var, train_test_split, train_val_split, mode, batch_size, variables_to_use): 
 
 
 
@@ -38,7 +38,7 @@ def collect_data_2D(data_path , transform, device, output_var, train_test_split,
 
     preprocess = None
     
-    dataset = Dataset_2D(data_path=data_path, transform=transform, device=device, output_var=output_var, mode=mode, preprocess=preprocess, variable_to_remove=variables_to_drop)
+    dataset = Dataset_2D(data_path=data_path, transform=transform, device=device, output_var=output_var, mode=mode, preprocess=preprocess, variable_to_use=variables_to_use)
 
     print(f'\nNumero di Training samples: {len(dataset)}')
 
@@ -85,7 +85,7 @@ def train_model(test_name, train_bool,
                  lr, epochs, train_loader, 
                  val_loader, test_loader,
                  res_path, device, dim, mode, transform, trained_net_path= "",
-                 debug = False, variables_to_drop=[]):
+                 debug = False, variables_to_use=None):
 
     
     print('TRAIN_MODEL\n\n')
@@ -122,7 +122,7 @@ def train_model(test_name, train_bool,
     elif (dim == '2D'):
         model = torchvision.models.resnet34(pretrained=False, progress=True)
 
-        num_input_channels = 12 - len(variables_to_drop)  # Number of stacked images in input 
+        num_input_channels = len(variables_to_use)  # Number of stacked images in input 
         print(num_input_channels)
         model = StackedResNet(num_input_channels, model) #da provare con la resnet freezata e più conv iniziali
 
@@ -360,11 +360,11 @@ def main_2d(args):
 
     batch_size = args.bs
 
-    train_data_loader, val_data_loader, test_data_loader = collect_data_2D(data_path=data_path, transform = transform, device = device, output_var= output_var, train_test_split=train_test_split, train_val_split=train_val_split, mode=args.mode, batch_size=batch_size, variables_to_drop=args.variables_to_drop)
+    train_data_loader, val_data_loader, test_data_loader = collect_data_2D(data_path=data_path, transform = transform, device = device, output_var= output_var, train_test_split=train_test_split, train_val_split=train_val_split, mode=args.mode, batch_size=batch_size, variables_to_use=args.variables_to_use)
 
     # Train model
 
-    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_drop)
+    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use)
 
 
 def main():
@@ -380,7 +380,7 @@ def main():
 
     parser.add_argument('--gpu', type=str, required=True)
 
-    parser.add_argument('--variables-to-drop', nargs='+', default=[])
+    parser.add_argument('--variables-to-use', nargs='+', default=['CO(GT)', 'PT08.S1(CO)', 'C6H6(GT)', 'PT08.S2(NMHC)', 'NOx(GT)', 'PT08.S3(NOx)', 'NO2(GT)', 'PT08.S4(NO2)', 'PT08.S5(O3)', 'T', 'RH', 'AH'])
 
     parser.add_argument('--do_test', action='store_true')
 

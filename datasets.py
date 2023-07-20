@@ -89,7 +89,7 @@ class Dataset_1D(torch.utils.data.Dataset):
             for j, window in enumerate(next_windows):
                 next_window = next_windows[j]
                 #fore_list.append(list_of_values[i+window_size])
-                win_mean = np.mean(next_window)
+                win_mean = np.mean(next_window[0:24]) # mean of the next day
                 if win_mean < 0:
                     raise ValueError(f"Error: win_mean < 0, number of -200: {np.count_nonzero(next_window == -200)}, number of < 0 {np.count_nonzero(next_window < 0)}, column: {columns[j]}, next_window: {next_window}")
                 self.forecast_simple_labels[columns[j]].append(win_mean)
@@ -260,7 +260,7 @@ class Dataset_1D_raw(torch.utils.data.Dataset):
 # We need to return a stack of variables that will fed as input into the CNN + output
 # TO DO: insert the output, modify input variable names and insert new arguments in dataset2_D
 class Dataset_2D(torch.utils.data.Dataset):
-    def __init__(self, data_path, transform, device, output_var, mode="regression", preprocess=None, variable_to_remove = []):
+    def __init__(self, data_path, transform, device, output_var, mode="regression", preprocess=None, variable_to_use = []):
         
         assert mode in {"forecasting_simple", "forecasting_advanced", "regression"}
 
@@ -274,7 +274,7 @@ class Dataset_2D(torch.utils.data.Dataset):
 
             variable_dir = root.split("/")[-2]
             
-            if (variable_dir in variable_to_remove): continue
+            if (variable_dir not in variable_to_use): continue
             
             for file in natsorted(files):
                 file_to_load = os.path.join(root, file)
