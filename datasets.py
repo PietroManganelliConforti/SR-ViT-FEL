@@ -89,7 +89,7 @@ class Dataset_1D(torch.utils.data.Dataset):
             for j, window in enumerate(next_windows):
                 next_window = next_windows[j]
                 #fore_list.append(list_of_values[i+window_size])
-                win_mean = np.mean(next_window)
+                win_mean = np.mean(next_window[0:24]) # mean of the next day
                 if win_mean < 0:
                     raise ValueError(f"Error: win_mean < 0, number of -200: {np.count_nonzero(next_window == -200)}, number of < 0 {np.count_nonzero(next_window < 0)}, column: {columns[j]}, next_window: {next_window}")
                 self.forecast_simple_labels[columns[j]].append(win_mean)
