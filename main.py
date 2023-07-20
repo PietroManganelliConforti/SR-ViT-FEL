@@ -58,9 +58,9 @@ def collect_data_2D(data_path , transform, device, output_var, train_test_split,
 
 
 
-def collect_data_1D(data_path, csv_file, device, train_test_split, train_val_split, output_var, mode, batch_size): 
+def collect_data_1D(data_path, csv_file, device, train_test_split, train_val_split, output_var, mode, batch_size, variables_to_use): 
 
-    dataset = Dataset_1D_raw(data_path, csv_file=csv_file, device=device, output_var=output_var, mode=mode)
+    dataset = Dataset_1D_raw(data_path, csv_file=csv_file, device=device, output_var=output_var, mode=mode, variables_to_use=variables_to_use)
                                                                  
     print(f'\nNumero di Training samples: {len(dataset)}')
 
@@ -108,13 +108,13 @@ def train_model(test_name, train_bool,
     if (dim == '1D'):
         # In 1D args.transform is equal to the architecture name
         if (transform == "Stacked1DLinear"):
-            num_input_channels = 12
+            num_input_channels = len(variables_to_use)
             model = Stacked1DLinear(num_input_channels, mode) 
         elif (transform == "Stacked2DLinear"):
             num_input_channels = 1  # Number of stacked images in input 
             model = Stacked2DLinear(num_input_channels, mode) 
         elif (transform == "LSTM1DLinear"):
-            num_input_channels = 12  # Number of stacked images in input 
+            num_input_channels = len(variables_to_use)  # Number of stacked images in input 
             model = LSTM1DLinear(num_input_channels, hidden_size=512, num_layers=2) 
             print (summary(model, (1, num_input_channels, 1024)))
 
@@ -288,11 +288,11 @@ def main_1d(args):
 
     trained_net_path = ""
 
-    train_data_loader, val_data_loader, test_data_loader = collect_data_1D(data_path=args.dataset_path, csv_file="AirQuality.csv", device = device, train_test_split=train_test_split, train_val_split=train_val_split, output_var=args.output_var, mode=args.mode, batch_size=args.bs)
+    train_data_loader, val_data_loader, test_data_loader = collect_data_1D(data_path=args.dataset_path, csv_file="AirQuality.csv", device = device, train_test_split=train_test_split, train_val_split=train_val_split, output_var=args.output_var, mode=args.mode, batch_size=args.bs, variables_to_use=args.variables_to_use)
 
     # Train model
 
-    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug)
+    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use)
 
 
 def main_2d(args):

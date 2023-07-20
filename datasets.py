@@ -148,7 +148,7 @@ class Dataset_1D(torch.utils.data.Dataset):
 
 
 class Dataset_1D_raw(torch.utils.data.Dataset):
-    def __init__(self, data_path, csv_file, device, window_size=168, step=6, window_discard_ratio=0.2, output_var="CO(GT)", mode="forecasting_simple"):
+    def __init__(self, data_path, csv_file, device, window_size=168, step=6, window_discard_ratio=0.2, output_var="CO(GT)", mode="forecasting_simple", variables_to_use=[]):
 
         assert step <= window_size
         assert mode in {"forecasting_simple", "forecasting_advanced", "regression"}
@@ -165,8 +165,9 @@ class Dataset_1D_raw(torch.utils.data.Dataset):
         input_variables = {}
         for column in df.columns:
             if (column != 'Date' and column != 'Time' and column !='NMHC(GT)'):
-                input_variables[column] = [float(str(elem).replace(',','.')) for elem in df[column].tolist()]
-                input_variables[column] = self.create_windows(input_variables[column], window_size, step)
+                if (variables_to_use != [] and column in variables_to_use):
+                    input_variables[column] = [float(str(elem).replace(',','.')) for elem in df[column].tolist()]
+                    input_variables[column] = self.create_windows(input_variables[column], window_size, step)
             
 
         if (mode == "forecasting_simple"):
