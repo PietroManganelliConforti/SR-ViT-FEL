@@ -41,10 +41,8 @@ class Stacked2DLinear(nn.Module):
         self.conv2 = nn.Conv2d(6, 3, kernel_size=3, stride=1, padding=1)
         self.bn2 = nn.BatchNorm2d(3)
         self.flatten = nn.Flatten()
-        if (mode == 'regression'):
-            self.fc1 = nn.Linear(5544, 1024) 
-        else:
-            self.fc1 = nn.Linear(6048, 1024) 
+
+        self.fc1 = nn.Linear(5040, 1024) 
         self.fc2 = nn.Linear(1024, 1)
 
     def forward(self, x):
@@ -168,7 +166,7 @@ Estimated Total Size (MB): 60.31
 
 class LSTMLinear(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers):
-        super(LSTM1DLinear, self).__init__()
+        super(LSTMLinear, self).__init__()
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
         self.flatten = nn.Flatten()
 
