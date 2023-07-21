@@ -10,7 +10,7 @@ import pandas as pd
 from natsort import natsorted
 import cv2
 from StackedResnet import StackedResNet
-from BaselineArchitectures import Stacked2DLinear, Stacked1DLinear, LSTM1DLinear
+from BaselineArchitectures import Stacked2DLinear, Stacked1DLinear, LSTMLinear
 from torchsummary import summary
 import time
 from datasets import *
@@ -71,9 +71,9 @@ def collect_data_1D(data_path, csv_file, device, train_test_split, train_val_spl
     print(f'There are: {len(train_dataset)} training samples, {len(val_dataset)} validation samples and {len(test_dataset)} test samples')
 
     # create dataloaders
-    train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
-    val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
-    test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
+    train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=1)
+    val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=1)
+    test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
 
     return train_data_loader, val_data_loader, test_data_loader
 
@@ -113,10 +113,10 @@ def train_model(test_name, train_bool,
         elif (transform == "Stacked2DLinear"):
             num_input_channels = 1  # Number of stacked images in input 
             model = Stacked2DLinear(num_input_channels, mode) 
-        elif (transform == "LSTM1DLinear"):
+        elif (transform == "LSTMLinear"):
             num_input_channels = len(variables_to_use)  # Number of stacked images in input 
-            model = LSTM1DLinear(num_input_channels, hidden_size=512, num_layers=2) 
-            print (summary(model, (1, num_input_channels, 1024)))
+            model = LSTMLinear(num_input_channels, hidden_size=512, num_layers=2) 
+            #print (summary(model, (1, num_input_channels, 1024)))
 
 
     elif (dim == '2D'):
@@ -266,7 +266,11 @@ def main_1d(args):
 
     system_time_string = time.strftime("%m_%d", system_time)
 
-    res_path = "results_"+system_time_string
+    var_to_use_path = ""
+    for var in args.variables_to_use:
+        var_to_use_path += var+"_"
+
+    res_path = os.path.join("results_"+system_time_string, var_to_use_path)
 
     os.makedirs(res_path, exist_ok=True)
 

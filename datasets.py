@@ -165,9 +165,8 @@ class Dataset_1D_raw(torch.utils.data.Dataset):
         input_variables = {}
         for column in df.columns:
             if (column != 'Date' and column != 'Time' and column !='NMHC(GT)'):
-                if (variables_to_use != [] and column in variables_to_use):
-                    input_variables[column] = [float(str(elem).replace(',','.')) for elem in df[column].tolist()]
-                    input_variables[column] = self.create_windows(input_variables[column], window_size, step)
+                input_variables[column] = [float(str(elem).replace(',','.')) for elem in df[column].tolist()]
+                input_variables[column] = self.create_windows(input_variables[column], window_size, step)
             
 
         if (mode == "forecasting_simple"):
@@ -191,6 +190,15 @@ class Dataset_1D_raw(torch.utils.data.Dataset):
 
         
         input_stack, num_samples = self.preprocess_windows (input_variables)
+
+        # Remove the parameters from the stack that are not in input_variables
+        idx_to_remove = []
+        for idx, param in enumerate(input_variables.keys()):
+            if (param not in variables_to_use):
+                idx_to_remove.append(idx)
+        input_stack = np.delete(input_stack, idx_to_remove, axis=1)
+        print ("Stack shape after removing parameters: ", input_stack.shape)
+
 
 
         self.input = input_stack # stack of windows
@@ -253,7 +261,6 @@ class Dataset_1D_raw(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         input_windows = torch.FloatTensor(np.array(self.input[idx])).unsqueeze(0).to(self.device) # [channel=1, h=12, w=168]
         output = torch.tensor(float(self.output[idx])).to(self.device)
-        
         return input_windows, output
 
 

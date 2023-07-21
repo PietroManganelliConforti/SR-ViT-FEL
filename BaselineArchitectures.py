@@ -166,7 +166,7 @@ Estimated Total Size (MB): 60.31
 """
 
 
-class LSTM1DLinear(nn.Module):
+class LSTMLinear(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers):
         super(LSTM1DLinear, self).__init__()
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
