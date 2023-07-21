@@ -16,7 +16,7 @@ class Dataset_1D(torch.utils.data.Dataset):
 
         df = pd.read_csv(csv_file, sep=';')
 
-        df.drop(['Unnamed: 15','Unnamed: 16'], axis = 1, inplace = True) # Unamed sono Nan, e da 9358 in poi sono NaN
+        df.drop(['Unnamed: 15','Unnamed: 16'], axis = 1, inplace = True) # Unamed only Nan, from 9358 NaN
         df = df[0:9357]
 
         variables = {}
@@ -28,14 +28,12 @@ class Dataset_1D(torch.utils.data.Dataset):
                 variables[column] = self.create_windows(variables[column], window_size, step)
                 values = np.array(variables[column])
                 valid_values = values[values > -100]
-                #print(valid_values)
                 self.column_means[column] = np.mean(valid_values)
                 print(f'Column {column} has mean {self.column_means[column]}')
  
         variables, num_samples = self.preprocess_windows (variables)
 
         self.input = variables # dictionary of lists of values
-        #self.classes = classes
         self.num_samples = num_samples
         self.window_size = window_size
         self.step = step
@@ -51,7 +49,6 @@ class Dataset_1D(torch.utils.data.Dataset):
 
         return windows
     
-    # TODO: sliding windows
     def preprocess_windows (self, variables):
         stack_of_windows = []
         columns = list(variables.keys())
@@ -62,7 +59,7 @@ class Dataset_1D(torch.utils.data.Dataset):
         self.forecast_simple_labels = { k: list() for k in columns }
         self.forecast_advanced_labels = { k: list() for k in columns }
         stack = np.stack(stack_of_windows, axis=1)
-        print ("Stack shape before preprocessing: ", stack.shape)  # (936, 12, WINDOW_SIZE)
+        print ("Stack shape before preprocessing: ", stack.shape)  # (N_SAMPLE, 12, WINDOW_SIZE)
         index_to_remove = []
         for i, windows in enumerate(stack):
             # Each window is a list of values for a specific variable of size WINDOW_SIZE
@@ -173,13 +170,7 @@ class Dataset_1D_raw(torch.utils.data.Dataset):
             label_file = "fore_simple_labels.txt"
             
         elif (mode == "forecasting_advanced"):
-            label_file = "fore_advanced_labels.txt"
-
-        # INPUT NEED TO BE FIXED FOR regr_labels 
-        elif (mode == "regression"):
-            pass
-            #label_file = "regr_labels.txt"
-            #input_variables.pop(output_var)            
+            label_file = "fore_advanced_labels.txt"       
 
         column = "forelabels"
         f = open(os.path.join(data_path, output_var, label_file), "r")
@@ -246,7 +237,7 @@ class Dataset_1D_raw(torch.utils.data.Dataset):
 
         # remove the windows from the stack for all the index_to_remove
         stack = np.delete(stack, index_to_remove, axis=0)
-        print ("Stack shape after preprocessing: ", stack.shape) # (710, 12, WINDOW_SIZE)
+        print ("Stack shape after preprocessing: ", stack.shape) # (N_SAMPLES, 12, WINDOW_SIZE)
 
         return stack, stack.shape[0]
 
@@ -342,19 +333,12 @@ class Dataset_2D(torch.utils.data.Dataset):
         elif (mode == "forecasting_advanced"):
             label_file = os.path.join(self.data_path, self.output_var,"fore_advanced_labels.txt")
 
-        # INPUT NEED TO BE FIXED FOR regr_labels 
-        elif (mode == "regression"):
-            #label_file = os.path.join(self.data_path, self.output_var,"regr_labels.txt")
-            pass 
-
         f = open(label_file, "r")
         outputs = f.readlines()
         f.close()
 
         self.labels = torch.tensor([float(output.strip()) for output in outputs])
 
-
-        #self.classes = classes
 
 
     def __len__(self):

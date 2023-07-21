@@ -176,8 +176,8 @@ class LSTMLinear(nn.Module):
         self.linear2 = nn.Linear(1024, 1)
 
     def forward(self, x):
-        # x has shape (batch, channels, length), we need to rearrange it to (batch, length, channels)
         x = x.squeeze(1)
+        # x has shape (batch, channels, length), we need to rearrange it to (batch, length, channels)
         x = x.permute(0, 2, 1)
         lstm_output, _ = self.lstm(x)
         # Take the last output of the LSTM sequence (corresponding to the last time step)

@@ -124,7 +124,7 @@ def train_model(test_name, train_bool,
 
         num_input_channels = len(variables_to_use)  # Number of stacked images in input 
         print(num_input_channels)
-        model = StackedResNet(num_input_channels, model) #da provare con la resnet freezata e più conv iniziali
+        model = StackedResNet(num_input_channels, model) # TODO: try with freezed resnet
 
 
     model = model.to(device)

@@ -52,7 +52,7 @@ def save_plot_loss_or_rel_err(info_dict, n_of_elements, path, test_name, smooth=
         
         if k == "loss_test" or k == "rel_err_test":
             if len(info_dict[k]) > 0:
-                plt.plot(n_of_elements - 1, info_dict[k], '-x', label=k)   #per posizionare il test in fondo 
+                plt.plot(n_of_elements - 1, info_dict[k], '-x', label=k)   # to position text in the background
         
         else:
             if smooth and len(info_dict[k]) > 1:
