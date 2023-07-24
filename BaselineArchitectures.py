@@ -33,7 +33,8 @@ class Stacked2DLinear(nn.Module):
 
         super(Stacked2DLinear, self).__init__()
 
-        self.conv1 = nn.Conv2d(num_input_channels, 6, kernel_size=3, stride=1, padding=1)
+        self.conv1 = nn.Conv2d(1, 6, kernel_size=3, stride=1, padding=1)
+
         self.bn1 = nn.BatchNorm2d(6)
 
         self.relu = nn.ReLU(inplace=True)
@@ -42,9 +43,7 @@ class Stacked2DLinear(nn.Module):
         self.bn2 = nn.BatchNorm2d(3)
         self.flatten = nn.Flatten()
 
-
-        # 2520
-        self.fc1 = nn.Linear(3024, 1024) 
+        self.fc1 = nn.Linear(3*num_input_channels*168, 1024) 
         self.fc2 = nn.Linear(1024, 1)
 
     def forward(self, x):

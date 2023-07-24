@@ -111,7 +111,7 @@ def train_model(test_name, train_bool,
             num_input_channels = len(variables_to_use)
             model = Stacked1DLinear(num_input_channels, mode) 
         elif (transform == "Stacked2DLinear"):
-            num_input_channels = 1  # Number of stacked images in input 
+            num_input_channels = len(variables_to_use) # Height of the image in input, number of stacked images = 1
             model = Stacked2DLinear(num_input_channels, mode) 
         elif (transform == "LSTMLinear"):
             num_input_channels = len(variables_to_use)  # Number of stacked images in input 
@@ -219,7 +219,7 @@ def train_model(test_name, train_bool,
     print('\n#----------------------#\n#     Test phase       #\n#----------------------#\n\n')
 
     model.eval()
-    
+
     with torch.no_grad():
         test_loss, test_rel_err = evaluate_model(model, test_loader,device) 
 
