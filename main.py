@@ -120,7 +120,7 @@ def train_model(test_name, train_bool,
 
 
     elif (dim == '2D'):
-        model = torchvision.models.resnet34(pretrained=False, progress=True)
+        model = torchvision.models.resnet18(pretrained=True, progress=True)
 
         num_input_channels = len(variables_to_use)  # Number of stacked images in input 
         print(num_input_channels)
