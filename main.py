@@ -115,8 +115,8 @@ def train_model(test_name, train_bool,
             model = Stacked2DLinear(num_input_channels, mode) 
         elif (transform == "LSTMLinear"):
             num_input_channels = len(variables_to_use)  # Number of stacked images in input 
-            model = LSTMLinear(num_input_channels, hidden_size=512, num_layers=2) 
-            #print (summary(model, (1, num_input_channels, 1024)))
+            model = LSTMLinear(num_input_channels, hidden_size=1024, num_layers=2) 
+            print (summary(model, (1, num_input_channels, 168)))
 
 
     elif (dim == '2D'):
@@ -216,7 +216,7 @@ def train_model(test_name, train_bool,
                 save_plots_and_report(ret_dict, save_path, test_name, True)
     
 
-    print('\n#----------------------#\n#     Test pahse       #\n#----------------------#\n\n')
+    print('\n#----------------------#\n#     Test phase       #\n#----------------------#\n\n')
 
     model.eval()
     
