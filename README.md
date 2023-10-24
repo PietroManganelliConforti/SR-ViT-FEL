@@ -1,4 +1,4 @@
-# Deep Learning and Wavelet Transform for Air Quality Forecasting (ICIAP2023)
+# Deep Learning and Wavelet Transform for Air Quality Forecasting 
 
 ## Details
 
