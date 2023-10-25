@@ -1,5 +1,6 @@
 import os
 from matplotlib import transforms as tr
+from scipy import signal
 import torchvision
 import numpy as np
 from tqdm import trange
@@ -9,7 +10,7 @@ import argparse
 import pandas as pd
 from natsort import natsorted
 import cv2
-from StackedResnet import StackedResNet
+from StackedResnet import StackedResNet, LSTMForecaster
 from BaselineArchitectures import Stacked2DLinear, Stacked1DLinear, LSTMLinear
 from torchsummary import summary
 import time
@@ -57,6 +58,50 @@ def collect_data_2D(data_path , transform, device, output_var, train_test_split,
 
 
 
+def collect_data_2D_lstm(data_path , transform, device, output_var, train_test_split, train_val_split, mode, batch_size, variables_to_use, csv_file): 
+
+    # preprocess = tr.Compose([
+    #                             Normalize(0,1)
+    #                         ])
+
+    preprocess = None
+    
+    dataset = Dataset_2D(data_path=data_path, transform=transform, device=device, output_var=output_var, mode=mode, preprocess=preprocess, variable_to_use=variables_to_use)
+    #print(list(dataset.windows[0].keys()))
+    output_var_idx = list(dataset.windows[0].keys()).index(output_var)
+
+    print(f'\nNumero di Training samples: {len(dataset)}')
+
+    train_dataset_2D, test_dataset_2D = torch.utils.data.random_split(dataset, [len(dataset) - int(len(dataset)*train_test_split), int(len(dataset)*train_test_split)])
+    
+    train_dataset_2D, val_dataset_2D = torch.utils.data.random_split(train_dataset_2D, [len(train_dataset_2D) - int(len(train_dataset_2D)*train_val_split), int(len(train_dataset_2D)*train_val_split)])
+
+    print(f'Ther are: {len(train_dataset_2D)} training samples, {len(val_dataset_2D)} validation samples and {len(test_dataset_2D)} test samples')
+
+    dataset_1D = Dataset_1D_raw(data_path, csv_file=csv_file, device=device, output_var=output_var, mode=mode, variables_to_use=variables_to_use)
+                                                                 
+    print(f'\nNumero di Training samples: {len(dataset)}')
+
+    train_dataset_1D, test_dataset_1D = torch.utils.data.random_split(dataset_1D, [len(dataset_1D) - int(len(dataset_1D)*train_test_split), int(len(dataset_1D)*train_test_split)])
+    
+    train_dataset_1D, val_dataset_1D = torch.utils.data.random_split(train_dataset_1D, [len(train_dataset_1D) - int(len(train_dataset_1D)*train_val_split), int(len(train_dataset_1D)*train_val_split)])
+    
+    print(f'There are: {len(train_dataset_1D)} training samples, {len(val_dataset_1D)} validation samples and {len(test_dataset_1D)} test samples')
+
+    train_dataset = ZipDatasets(train_dataset_1D, train_dataset_2D)
+    val_dataset = ZipDatasets(val_dataset_1D, val_dataset_2D)
+    test_dataset = ZipDatasets(test_dataset_1D, test_dataset_2D)
+
+    # create dataloaders
+    train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=1)
+    val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=1)
+    test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
+
+    return train_data_loader, val_data_loader, test_data_loader, output_var_idx
+
+
+
+
 
 def collect_data_1D(data_path, csv_file, device, train_test_split, train_val_split, output_var, mode, batch_size, variables_to_use): 
 
@@ -85,7 +130,7 @@ def train_model(test_name, train_bool,
                  lr, epochs, train_loader, 
                  val_loader, test_loader,
                  res_path, device, dim, mode, transform, trained_net_path= "",
-                 debug = False, variables_to_use=None):
+                 debug = False, variables_to_use=None, out_channel_idx=None):
 
     
     print('TRAIN_MODEL\n\n')
@@ -119,12 +164,20 @@ def train_model(test_name, train_bool,
             print (summary(model, (1, num_input_channels, 168)))
 
 
-    elif (dim == '2D'):
+    elif (dim == '2D') or (dim == '2D_LSTM'):
         model = torchvision.models.resnet18(pretrained=True, progress=True)
 
         num_input_channels = len(variables_to_use)  # Number of stacked images in input 
         print(num_input_channels)
-        model = StackedResNet(num_input_channels, model) # TODO: try with freezed resnet
+        model = StackedResNet(num_input_channels, num_output_features=512, resnet=model)
+
+        if (dim == '2D_LSTM'):
+            # freeze stacked resnet
+            for param in model.parameters():
+                param.requires_grad = False
+
+        if (dim == '2D_LSTM'):
+            model = LSTMForecaster(model, channels=num_input_channels, num_layers=2, hidden_size=512, outputs=1, mode='option1')
 
 
     model = model.to(device)
@@ -148,7 +201,6 @@ def train_model(test_name, train_bool,
         }
     }
 
-
     if train_bool:
 
         print(f"Training for {epochs} epochs...")
@@ -160,17 +212,45 @@ def train_model(test_name, train_bool,
             # Training Phase
 
             model.train()
+            if dim == '2D_LSTM':
+                model.stacked_resnet.eval()
 
             train_loss = 0
             train_rel_err = 0
 
             for i, (images, labels) in enumerate(train_loader):
-                images = images.to(device)
+                # if dim == '2D_LSTM':
+                #     images, signals = images
+                #     cwt = signal.cwt(signals, getattr(signal, transform), np.arange(1, 127))
+                #     if not torch.all(cwt == images):
+                #         print("CWT and images are different")
+                #         raise Exception()
+
+                if dim == '2D_LSTM':
+                    images = (images[0].to(device), images[1].to(device))
+                else:
+                    images = images.to(device)
                 labels = labels.to(device)
 
-                out = model(images) 
                 optimizer.zero_grad()
-                out = torch.flatten(out)             
+
+                if dim == '2D_LSTM':
+                    # signals: (N, L, C)
+                    # images: (N, H, W, C)
+                    signals, images = images
+                    # TODO fix shapes
+                    signals = signals.squeeze().reshape(signals.shape[0], signals.shape[2], signals.shape[1])
+                    #print(signals.shape, images.shape)
+                    # out: (N, 24)
+                    out = torch.zeros((images.shape[0], 24)).to(device)
+                    for j in range(24):
+                        # out[:, j]: (N, 1)
+                        out[:,j] = model(images, signals)
+                        signals = torch.cat([signals[:, 1:, out_channel_idx], out[:,j].unsqueeze(1)], dim=1)
+                else:
+                    out = model(images)
+                
+                out = torch.flatten(out)
                 loss = torch.nn.functional.mse_loss(out, labels)
                 loss.backward()
                 optimizer.step()
@@ -371,10 +451,85 @@ def main_2d(args):
     train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use)
 
 
+
+def main_2d_lstm(args):
+    
+    print(args)
+
+    debug = args.do_debug
+
+    device = args.gpu
+
+    device = hardware_check()
+
+
+    os.environ["CUDA_VISIBLE_DEVICES"] = device
+ 
+    print("GPU IN USO: ", device)
+
+    # Seed #
+
+    seed = 0
+
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+    torch.manual_seed(seed)
+
+    torch.cuda.manual_seed(seed)
+
+    ####### ARGS
+
+    system_time = time.localtime()
+
+    system_time_string = time.strftime("%d_%m", system_time)
+
+    res_path = "results_"+system_time_string
+
+    os.makedirs(res_path, exist_ok=True)
+
+    test_name = f'{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_{args.bs}_{args.variables_to_use}'
+
+    train_bool = not args.do_test
+
+    print("train_bool",train_bool)
+
+    input_shape = (3, 362, 512)
+
+    train_val_split = 0.1
+
+    train_test_split = 0.2
+
+    lr = 1e-5
+
+    epoch = 100
+
+    debug = debug
+
+    data_path = "./data"
+
+    trained_net_path = ""
+
+    data_path = args.dataset_path
+
+    output_var = args.output_var
+
+    transform = args.transform
+
+    batch_size = args.bs
+
+    train_data_loader, val_data_loader, test_data_loader, output_var_idx = collect_data_2D_lstm(data_path=data_path, transform = transform, device = device, output_var= output_var, train_test_split=train_test_split, train_val_split=train_val_split, mode=args.mode, batch_size=batch_size, variables_to_use=args.variables_to_use, csv_file="AirQuality.csv")
+
+    # Train model
+
+    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use, out_channel_idx=output_var_idx)
+
+
+
+
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('dim', choices=["1D", "2D"])
+    parser.add_argument('dim', choices=["1D", "2D", "2D_LSTM"])
 
     parser.add_argument('--dataset_path', type=str, required=True)
 
@@ -390,7 +545,7 @@ def main():
 
     parser.add_argument('--do_debug', action='store_true')
 
-    parser.add_argument('--mode', choices=["regression", "forecasting_simple", "forecasting_advanced"], default="forecasting_advanced")
+    parser.add_argument('--mode', choices=["regression", "forecasting_simple", "forecasting_advanced", "forecasting_lstm"], default="forecasting_advanced")
 
     parser.add_argument('--bs', type=int, default=4, help='batch size')
 
@@ -400,6 +555,8 @@ def main():
         main_1d(args)
     elif args.dim == "2D":
         main_2d(args)
+    elif args.dim == "2D_LSTM":
+        main_2d_lstm(args)
 
 
 if __name__ == '__main__':

@@ -1,6 +1,7 @@
 #!/bin/bash
 
 python3 dataset_generator.py datasets/2D \
+   --only-labels \
    --scale-type arange \
    --scale-start 1 \
    --scale-stop 127 \

@@ -18,6 +18,7 @@ class StackedResNet(nn.Module):
         self.bn2 = nn.BatchNorm2d(3)
 
         self.resnet = resnet
+        # TODO remove this layer
         self.resnet.fc = nn.Linear(512, num_output_features)
 
     def forward(self, x):
@@ -58,8 +59,10 @@ class LSTMForecaster(nn.Module):
 
         self.stacked_resnet = stacked_resnet
 
+        input_size = channels + stacked_resnet.num_output_features
+        print(f'channels: {channels}, stacked_resnet.num_output_features: {stacked_resnet.num_output_features}, input_size: {input_size}')
         self.lstm = nn.LSTM(
-            input_size=channels + stacked_resnet.num_output_features,
+            input_size=input_size,
             hidden_size=hidden_size,
             num_layers=num_layers,
             batch_first=True
@@ -71,12 +74,14 @@ class LSTMForecaster(nn.Module):
 
     # x_img: (N, H, W, C)
     # x_signal: (N, L, C)
+    # -> (N, Y)
     def forward(self, x_img, x_signal):
 
-        L = x_signal.shape[1]
+        L = x_signal.shape[2]
         # (N, F)
         features = self.stacked_resnet(x_img)
         # (N, L, C+F)
+        print('AO' + str(features.unsqueeze(1).expand(-1, L, -1).shape) + str(x_signal.shape))
         x_lstm = torch.cat(
             (features.unsqueeze(1).expand(-1, L, -1), x_signal),
             dim=2

@@ -8,11 +8,12 @@ from natsort import natsorted
 
 class Dataset_1D(torch.utils.data.Dataset):
 
-    def __init__(self, csv_file, window_size, step, window_discard_ratio=0.2):
+    def __init__(self, csv_file, window_size, step, window_discard_ratio=0.2, do_mean=False):
 
         assert step <= window_size
 
         self.window_discard_ratio = window_discard_ratio
+        self.do_mean = do_mean
 
         df = pd.read_csv(csv_file, sep=';')
 
@@ -58,6 +59,7 @@ class Dataset_1D(torch.utils.data.Dataset):
         ### Process the stack of windows ###
         self.forecast_simple_labels = { k: list() for k in columns }
         self.forecast_advanced_labels = { k: list() for k in columns }
+        self.forecast_lstm_labels = { k: list() for k in columns }
         stack = np.stack(stack_of_windows, axis=1)
         print ("Stack shape before preprocessing: ", stack.shape)  # (N_SAMPLE, 12, WINDOW_SIZE)
         index_to_remove = []
@@ -91,10 +93,12 @@ class Dataset_1D(torch.utils.data.Dataset):
                     raise ValueError(f"Error: win_mean < 0, number of -200: {np.count_nonzero(next_window == -200)}, number of < 0 {np.count_nonzero(next_window < 0)}, column: {columns[j]}, next_window: {next_window}")
                 self.forecast_simple_labels[columns[j]].append(win_mean)
                 self.forecast_advanced_labels[columns[j]].append((win_mean + self.column_means[columns[j]]) / 2)
+                self.forecast_lstm_labels[columns[j]].append(next_window[0:24])
 
         for c in columns:
             self.forecast_simple_labels[c] = np.array(self.forecast_simple_labels[c])
             self.forecast_advanced_labels[c] = np.array(self.forecast_advanced_labels[c])
+            self.forecast_lstm_labels[c] = np.array(self.forecast_lstm_labels[c])
 
         # remove the windows from the stack for all the index_to_remove
         stack = np.delete(stack, index_to_remove, axis=0)
@@ -102,6 +106,7 @@ class Dataset_1D(torch.utils.data.Dataset):
         for c in columns:
             self.forecast_simple_labels[c] = np.delete(self.forecast_simple_labels[c], index_to_remove, axis=0)
             self.forecast_advanced_labels[c] = np.delete(self.forecast_advanced_labels[c], index_to_remove, axis=0)
+            self.forecast_lstm_labels[c] = np.delete(self.forecast_lstm_labels[c], index_to_remove, axis=0)
 
         print ("Stack shape after preprocessing: ", stack.shape) # (710, 12, WINDOW_SIZE)
         print ("forecast_simple_labels shape after preprocessing: ", self.forecast_simple_labels[columns[0]].shape)
@@ -131,14 +136,17 @@ class Dataset_1D(torch.utils.data.Dataset):
         if idx == self.num_samples - 1:
             fore_simple_dict = None
             fore_advanced_dict = None
+            fore_lstm_dict = None
         else:
             fore_simple_dict = {}
             fore_advanced_dict = {}
+            fore_lstm_dict = {}
             for key in self.input.keys():
                 fore_simple_dict[key] = self.forecast_simple_labels[key][idx]
                 fore_advanced_dict[key] = self.forecast_advanced_labels[key][idx]
+                fore_lstm_dict[key] = self.forecast_lstm_labels[key][idx]
 
-        item = {'input': input_dict, 'fore_simple': fore_simple_dict, 'fore_advanced': fore_advanced_dict}
+        item = {'input': input_dict, 'fore_simple': fore_simple_dict, 'fore_advanced': fore_advanced_dict, 'fore_lstm': fore_lstm_dict}
 
         return item
 
@@ -148,7 +156,7 @@ class Dataset_1D_raw(torch.utils.data.Dataset):
     def __init__(self, data_path, csv_file, device, window_size=168, step=6, window_discard_ratio=0.2, output_var="CO(GT)", mode="forecasting_simple", variables_to_use=[]):
 
         assert step <= window_size
-        assert mode in {"forecasting_simple", "forecasting_advanced", "regression"}
+        assert mode in {"forecasting_simple", "forecasting_advanced", "regression", "forecasting_lstm"}
 
         self.window_discard_ratio = window_discard_ratio
 
@@ -169,8 +177,8 @@ class Dataset_1D_raw(torch.utils.data.Dataset):
         if (mode == "forecasting_simple"):
             label_file = "fore_simple_labels.txt"
             
-        elif (mode == "forecasting_advanced"):
-            label_file = "fore_advanced_labels.txt"       
+        elif (mode == "forecasting_advanced") or (mode == "forecasting_lstm"): # TODO remove when we have the labels
+            label_file = "fore_advanced_labels.txt"
 
         column = "forelabels"
         f = open(os.path.join(data_path, output_var, label_file), "r")
@@ -243,14 +251,19 @@ class Dataset_1D_raw(torch.utils.data.Dataset):
 
     def __len__(self):
 
-        if self.mode == "forecasting_simple" or self.mode == "forecasting_advanced": return self.num_samples - 1
+        if self.mode in {"forecasting_simple", "forecasting_advanced", "forecasting_lstm"}: return self.num_samples - 1
 
         if self.mode == "regression": return self.num_samples
 
         raise Exception()
         
     def __getitem__(self, idx):
-        input_windows = torch.FloatTensor(np.array(self.input[idx])).unsqueeze(0).to(self.device) # [channel=1, h=12, w=168]
+        if self.mode == 'forecasting_lstm':
+            input_windows = torch.FloatTensor(np.array(self.input[idx])).unsqueeze(0) # [channel=1, h=12, w=168]
+        else:
+            input_windows = torch.FloatTensor(np.array(self.input[idx])).unsqueeze(0).to(self.device) # [channel=1, h=12, w=168]
+        if self.mode == 'forecasting_lstm':
+            return input_windows # TODO also compute labels properly
         output = torch.tensor(float(self.output[idx])).to(self.device)
         return input_windows, output
 
@@ -261,7 +274,7 @@ class Dataset_1D_raw(torch.utils.data.Dataset):
 class Dataset_2D(torch.utils.data.Dataset):
     def __init__(self, data_path, transform, device, output_var, mode="regression", preprocess=None, variable_to_use = []):
         
-        assert mode in {"forecasting_simple", "forecasting_advanced", "regression"}
+        assert mode in {"forecasting_simple", "forecasting_advanced", "regression", "forecasting_lstm"}
 
         windows = {}
         old_variable_dir = None
@@ -333,17 +346,21 @@ class Dataset_2D(torch.utils.data.Dataset):
         elif (mode == "forecasting_advanced"):
             label_file = os.path.join(self.data_path, self.output_var,"fore_advanced_labels.txt")
 
-        f = open(label_file, "r")
-        outputs = f.readlines()
-        f.close()
+        if not (mode == "forecasting_lstm"):
+            f = open(label_file, "r")
+            outputs = f.readlines()
+            f.close()
 
-        self.labels = torch.tensor([float(output.strip()) for output in outputs])
+            self.labels = torch.tensor([float(output.strip()) for output in outputs])
+        else:
+            label_file = os.path.join(self.data_path, self.output_var,"fore_lstm.npy")
+            self.labels = torch.tensor(np.load(label_file))
 
 
 
     def __len__(self):
 
-        if self.mode == "forecasting_simple" or self.mode == "forecasting_advanced": return self.num_samples - 1
+        if self.mode in {"forecasting_simple", "forecasting_advanced", "forecasting_lstm"}: return self.num_samples - 1
 
         if self.mode == "regression": return self.num_samples
 
@@ -414,3 +431,17 @@ class Dataset_2D(torch.utils.data.Dataset):
 
 #a = Dataset_2D("2D_datasets/2D_scale_stop_small", "morlet", "cpu", "CO(GT)", mode="forecasting_advanced", preprocess=None, variable_to_remove="AH")
 
+
+# from https://discuss.pytorch.org/t/dataloader-shuffle-same-order-with-multiple-dataset/94800
+class ZipDatasets(torch.utils.data.Dataset):
+    def __init__(self, datasetA, datasetB):
+        self.datasetA = datasetA
+        self.datasetB = datasetB
+        
+    def __getitem__(self, index):
+        xA = self.datasetA[index]
+        xB, yB = self.datasetB[index]
+        return (xA, xB), yB
+     
+    def __len__(self):
+        return len(self.datasetA)

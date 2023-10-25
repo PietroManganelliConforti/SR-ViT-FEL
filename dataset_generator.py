@@ -29,6 +29,9 @@ def process_intervals_from_dataset(dataset, wavelets, scales, k, window_size, st
 
         f_fore_advanced = open(folder_name + "/" + k + "/fore_advanced_labels.txt", "w")
 
+        # f_fore_lstm = open(folder_name + "/" + k + "/fore_lstm.txt", "w")
+        f_fore_lstm = []
+
         for i, sample in enumerate(dataset):
 
             interval = sample["input"][k]
@@ -36,6 +39,8 @@ def process_intervals_from_dataset(dataset, wavelets, scales, k, window_size, st
             if sample["fore_simple"] is not None:
                 f_fore_simple.write(str(sample["fore_simple"][k])+"\n")
                 f_fore_advanced.write(str(sample["fore_advanced"][k])+"\n")
+                # f_fore_lstm.write(str(sample["fore_lstm"][k])+"\n")
+                f_fore_lstm += [sample["fore_lstm"][k]]
 
             f_regr.write(str(np.mean(interval))+"\n")
 
@@ -46,6 +51,9 @@ def process_intervals_from_dataset(dataset, wavelets, scales, k, window_size, st
 
         f_fore_simple.close()
         f_fore_advanced.close()
+        # f_fore_lstm.close()
+
+        np.save(folder_name + "/" + k + "/fore_lstm.npy", np.array(f_fore_lstm))
 
         if only_labels_flag: continue
 
