@@ -354,7 +354,7 @@ class Dataset_2D(torch.utils.data.Dataset):
             self.labels = torch.tensor([float(output.strip()) for output in outputs])
         else:
             label_file = os.path.join(self.data_path, self.output_var,"fore_lstm.npy")
-            self.labels = torch.tensor(np.load(label_file))
+            self.labels = torch.tensor(np.load(label_file),dtype=torch.float32)
 
 
 

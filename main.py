@@ -1,6 +1,7 @@
 import os
 from matplotlib import transforms as tr
 from scipy import signal
+from scipy.signal import ricker
 import torchvision
 import numpy as np
 from tqdm import trange
@@ -130,7 +131,8 @@ def train_model(test_name, train_bool,
                  lr, epochs, train_loader, 
                  val_loader, test_loader,
                  res_path, device, dim, mode, transform, trained_net_path= "",
-                 debug = False, variables_to_use=None, out_channel_idx=None):
+                 debug = False, variables_to_use=None, out_channel_idx=None,
+                 num_output_features=1):
 
     
     print('TRAIN_MODEL\n\n')
@@ -168,17 +170,15 @@ def train_model(test_name, train_bool,
         model = torchvision.models.resnet18(pretrained=True, progress=True)
 
         num_input_channels = len(variables_to_use)  # Number of stacked images in input 
-        print(num_input_channels)
-        model = StackedResNet(num_input_channels, num_output_features=512, resnet=model)
+
+        model = StackedResNet(num_input_channels, num_output_features=num_output_features, resnet=model)
 
         if (dim == '2D_LSTM'):
             # freeze stacked resnet
             for param in model.parameters():
                 param.requires_grad = False
 
-        if (dim == '2D_LSTM'):
             model = LSTMForecaster(model, channels=num_input_channels, num_layers=2, hidden_size=512, outputs=1, mode='option1')
-
 
     model = model.to(device)
 
@@ -200,7 +200,7 @@ def train_model(test_name, train_bool,
             "rel_err_test":[]   
         }
     }
-
+    
     if train_bool:
 
         print(f"Training for {epochs} epochs...")
@@ -219,9 +219,12 @@ def train_model(test_name, train_bool,
             train_rel_err = 0
 
             for i, (images, labels) in enumerate(train_loader):
+
+
                 # if dim == '2D_LSTM':
                 #     images, signals = images
-                #     cwt = signal.cwt(signals, getattr(signal, transform), np.arange(1, 127))
+                #     cwt = signal.cwt(signals, ricker
+                #                 , np.arange(1, 127))
                 #     if not torch.all(cwt == images):
                 #         print("CWT and images are different")
                 #         raise Exception()
@@ -250,7 +253,9 @@ def train_model(test_name, train_bool,
                 else:
                     out = model(images)
                 
-                out = torch.flatten(out)
+                if not (dim=='2D' and mode=='forecasting_lstm'):
+                    out = torch.flatten(out) # era di default, nel caso 2D_24 non serve
+
                 loss = torch.nn.functional.mse_loss(out, labels)
                 loss.backward()
                 optimizer.step()
@@ -430,6 +435,10 @@ def main_2d(args):
 
     epoch = 100
 
+    num_output_features = 24 if args.mode == "forecasting_lstm" else 1
+
+    print("num_output_features", num_output_features)
+
     debug = debug
 
     data_path = "./data"
@@ -448,7 +457,7 @@ def main_2d(args):
 
     # Train model
 
-    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use)
+    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use, num_output_features=num_output_features)
 
 
 
