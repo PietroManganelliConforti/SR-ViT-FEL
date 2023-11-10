@@ -1,5 +1,7 @@
 import torch.nn as nn
 import torch
+import transformers
+from transformers import ViTModel
 
 class StackedResNet(nn.Module):
 
@@ -97,4 +99,92 @@ class LSTMForecaster(nn.Module):
 
         return y_fc2
 
+
+# https://github.com/ruiqiRichard/EEGViT/blob/master/models/EEGViT_pretrained.py
+"""
+  (ViT): ViTForImageClassification(
+    (vit): ViTModel(
+      (embeddings): ViTEmbeddings(
+        (patch_embeddings): ViTPatchEmbeddings(
+          (projection): Conv2d(256, 768, kernel_size=(8, 1), stride=(8, 1))
+        )
+        (dropout): Dropout(p=0.0, inplace=False)
+      )
+      (encoder): ViTEncoder(
+        (layer): ModuleList(
+          (0-11): 12 x ViTLayer(
+            (attention): ViTAttention(
+              (attention): ViTSelfAttention(
+                (query): Linear(in_features=768, out_features=768, bias=True)
+                (key): Linear(in_features=768, out_features=768, bias=True)
+                (value): Linear(in_features=768, out_features=768, bias=True)
+                (dropout): Dropout(p=0.0, inplace=False)
+              )
+              (output): ViTSelfOutput(
+                (dense): Linear(in_features=768, out_features=768, bias=True)
+                (dropout): Dropout(p=0.0, inplace=False)
+              )
+            )
+            (intermediate): ViTIntermediate(
+              (dense): Linear(in_features=768, out_features=3072, bias=True)
+              (intermediate_act_fn): GELUActivation()
+            )
+            (output): ViTOutput(
+              (dense): Linear(in_features=3072, out_features=768, bias=True)
+              (dropout): Dropout(p=0.0, inplace=False)
+            )
+            (layernorm_before): LayerNorm((768,), eps=1e-12, elementwise_affine=True)
+            (layernorm_after): LayerNorm((768,), eps=1e-12, elementwise_affine=True)
+          )
+        )
+      )
+      (layernorm): LayerNorm((768,), eps=1e-12, elementwise_affine=True)
+    )
+    (classifier): Linear(in_features=768, out_features=1000, bias=True)
+  )
+)
+"""
+class ViTForecaster (nn.Module):
+    def __init__(
+        self,
+        stacked_resnet,
+        channels=11,
+        hidden_size=512,
+        outputs=24,
+    ) -> None:
+        super().__init__()
+
+
+        self.stacked_resnet = stacked_resnet
+
+        #input_size = channels + stacked_resnet.num_output_features
+        #print(f'channels: {channels}, stacked_resnet.num_output_features: {stacked_resnet.num_output_features}, input_size: {input_size}')
+        
+        model_name = "google/vit-base-patch16-224"
+        config = transformers.ViTConfig.from_pretrained(model_name)
+        config.update({'num_channels': 256})
+        config.update({'image_size': (129,14)})
+        config.update({'patch_size': (8,1)})
+
+        model = transformers.ViTForImageClassification.from_pretrained(model_name, config=config, ignore_mismatched_sizes=True)        
+        # TODO: modify next lines to have StackedResnet features directly into the encoder and output 24 values
+
+        # model.vit.embeddings.patch_embeddings.projection = torch.nn.Conv2d(256, 768, kernel_size=(8, 1), stride=(8, 1), padding=(0,0), groups=256)
+        # model.classifier=torch.nn.Sequential(torch.nn.Linear(768,1000,bias=True),
+        #                              torch.nn.Dropout(p=0.1),
+        #                              torch.nn.Linear(1000,2,bias=True))
+        self.ViT = model
+
+    # x_img: (N, H, W, C)
+    # -> (N, Y)
+    def forward(self, x_img):
+
+        L = x_signal.shape[2]
+        # (N, F)
+        features = self.stacked_resnet(x_img)
+        # (N, L, C+F)
+        
+        x  = self.ViT(features) 
+
+        return y_fc2
 

@@ -11,7 +11,7 @@ import argparse
 import pandas as pd
 from natsort import natsorted
 import cv2
-from StackedResnet import StackedResNet, LSTMForecaster
+from StackedResnet import StackedResNet, LSTMForecaster, ViTForecaster
 from BaselineArchitectures import Stacked2DLinear, Stacked1DLinear, LSTMLinear
 from torchsummary import summary
 import time
