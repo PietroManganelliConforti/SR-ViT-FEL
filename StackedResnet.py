@@ -1,4 +1,5 @@
 import torch.nn as nn
+import torch.nn.functional as F
 import torch
 import transformers
 from transformers import ViTModel
@@ -102,89 +103,95 @@ class LSTMForecaster(nn.Module):
 
 # https://github.com/ruiqiRichard/EEGViT/blob/master/models/EEGViT_pretrained.py
 """
-  (ViT): ViTForImageClassification(
-    (vit): ViTModel(
-      (embeddings): ViTEmbeddings(
-        (patch_embeddings): ViTPatchEmbeddings(
-          (projection): Conv2d(256, 768, kernel_size=(8, 1), stride=(8, 1))
-        )
-        (dropout): Dropout(p=0.0, inplace=False)
+ViTForImageClassification(
+  (vit): ViTModel(
+    (embeddings): ViTEmbeddings(
+      (patch_embeddings): ViTPatchEmbeddings(
+        (projection): Conv2d(3, 768, kernel_size=(16, 16), stride=(16, 16))
       )
-      (encoder): ViTEncoder(
-        (layer): ModuleList(
-          (0-11): 12 x ViTLayer(
-            (attention): ViTAttention(
-              (attention): ViTSelfAttention(
-                (query): Linear(in_features=768, out_features=768, bias=True)
-                (key): Linear(in_features=768, out_features=768, bias=True)
-                (value): Linear(in_features=768, out_features=768, bias=True)
-                (dropout): Dropout(p=0.0, inplace=False)
-              )
-              (output): ViTSelfOutput(
-                (dense): Linear(in_features=768, out_features=768, bias=True)
-                (dropout): Dropout(p=0.0, inplace=False)
-              )
-            )
-            (intermediate): ViTIntermediate(
-              (dense): Linear(in_features=768, out_features=3072, bias=True)
-              (intermediate_act_fn): GELUActivation()
-            )
-            (output): ViTOutput(
-              (dense): Linear(in_features=3072, out_features=768, bias=True)
+      (dropout): Dropout(p=0.0, inplace=False)
+    )
+    (encoder): ViTEncoder(
+      (layer): ModuleList(
+        (0-11): 12 x ViTLayer(
+          (attention): ViTAttention(
+            (attention): ViTSelfAttention(
+              (query): Linear(in_features=768, out_features=768, bias=True)
+              (key): Linear(in_features=768, out_features=768, bias=True)
+              (value): Linear(in_features=768, out_features=768, bias=True)
               (dropout): Dropout(p=0.0, inplace=False)
             )
-            (layernorm_before): LayerNorm((768,), eps=1e-12, elementwise_affine=True)
-            (layernorm_after): LayerNorm((768,), eps=1e-12, elementwise_affine=True)
+            (output): ViTSelfOutput(
+              (dense): Linear(in_features=768, out_features=768, bias=True)
+              (dropout): Dropout(p=0.0, inplace=False)
+            )
           )
+          (intermediate): ViTIntermediate(
+            (dense): Linear(in_features=768, out_features=3072, bias=True)
+            (intermediate_act_fn): GELUActivation()
+          )
+          (output): ViTOutput(
+            (dense): Linear(in_features=3072, out_features=768, bias=True)
+            (dropout): Dropout(p=0.0, inplace=False)
+          )
+          (layernorm_before): LayerNorm((768,), eps=1e-12, elementwise_affine=True)
+          (layernorm_after): LayerNorm((768,), eps=1e-12, elementwise_affine=True)
         )
       )
-      (layernorm): LayerNorm((768,), eps=1e-12, elementwise_affine=True)
     )
-    (classifier): Linear(in_features=768, out_features=1000, bias=True)
+    (layernorm): LayerNorm((768,), eps=1e-12, elementwise_affine=True)
   )
+  (classifier): Linear(in_features=768, out_features=1000, bias=True)
 )
 """
+
+# 1. 512 features from stackedresnet into encoder
+# 2. feature maps from stackedresent as images for ViT
+# 3. transforms as images for ViT
 class ViTForecaster (nn.Module):
     def __init__(
         self,
         stacked_resnet,
-        channels=11,
-        hidden_size=512,
+        #channels=11,
+        #hidden_size=512,
         outputs=24,
     ) -> None:
         super().__init__()
 
+        self.conv1x1 = torch.nn.Conv2d(12, 3, kernel_size=1)
 
+
+        # TODO: case 3 -> remove the stacked_resnet
         self.stacked_resnet = stacked_resnet
+        self.stacked_resnet.resnet.fc = nn.Identity()
 
-        #input_size = channels + stacked_resnet.num_output_features
-        #print(f'channels: {channels}, stacked_resnet.num_output_features: {stacked_resnet.num_output_features}, input_size: {input_size}')
-        
         model_name = "google/vit-base-patch16-224"
         config = transformers.ViTConfig.from_pretrained(model_name)
-        config.update({'num_channels': 256})
-        config.update({'image_size': (129,14)})
-        config.update({'patch_size': (8,1)})
-
+        
+        # TODO: can we use this config update to avoid interpolation?
+        # config.update({'num_channels': 256})
+        # config.update({'image_size': (129,14)})
+        # config.update({'patch_size': (8,1)})
+        
         model = transformers.ViTForImageClassification.from_pretrained(model_name, config=config, ignore_mismatched_sizes=True)        
-        # TODO: modify next lines to have StackedResnet features directly into the encoder and output 24 values
-
-        # model.vit.embeddings.patch_embeddings.projection = torch.nn.Conv2d(256, 768, kernel_size=(8, 1), stride=(8, 1), padding=(0,0), groups=256)
-        # model.classifier=torch.nn.Sequential(torch.nn.Linear(768,1000,bias=True),
-        #                              torch.nn.Dropout(p=0.1),
-        #                              torch.nn.Linear(1000,2,bias=True))
+        #model.vit.embeddings.patch_embeddings.projection = torch.nn.Conv2d(512, 768, kernel_size=(8, 1), stride=(8, 1), padding=(0,0), groups=256)
+        model.classifier=torch.nn.Sequential(torch.nn.Linear(768,1000,bias=True),
+                                       torch.nn.Dropout(p=0.1),
+                                       torch.nn.Linear(1000,outputs,bias=True))
         self.ViT = model
 
     # x_img: (N, H, W, C)
     # -> (N, Y)
     def forward(self, x_img):
+        # From (8, 12, 396, 496) to (8, 3, 224, 224) 
+        x_img = F.interpolate(x_img, size=(224, 224), mode='bilinear', align_corners=False)
+        x_img = self.conv1x1(x_img)
 
-        L = x_signal.shape[2]
+        L = x_img.shape[2]
         # (N, F)
-        features = self.stacked_resnet(x_img)
+        #features = self.stacked_resnet(x_img)
         # (N, L, C+F)
-        
-        x  = self.ViT(features) 
+        outputs = self.ViT(x_img).logits
 
-        return y_fc2
+        return outputs
 

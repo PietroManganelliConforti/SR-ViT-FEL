@@ -166,7 +166,7 @@ def train_model(test_name, train_bool,
             print (summary(model, (1, num_input_channels, 168)))
 
 
-    elif (dim == '2D') or (dim == '2D_LSTM'):
+    elif (dim == '2D') or (dim == '2D_LSTM') or (dim == '2D_ViT'):
         model = torchvision.models.resnet18(pretrained=True, progress=True)
 
         num_input_channels = len(variables_to_use)  # Number of stacked images in input 
@@ -179,6 +179,13 @@ def train_model(test_name, train_bool,
                 param.requires_grad = False
 
             model = LSTMForecaster(model, channels=num_input_channels, num_layers=2, hidden_size=512, outputs=1, mode='option1')
+
+        elif (dim == '2D_ViT'):
+            # freeze stacked resnet
+            for param in model.parameters():
+                param.requires_grad = False
+
+            model = ViTForecaster(model, outputs=24)
 
     model = model.to(device)
 
@@ -212,7 +219,7 @@ def train_model(test_name, train_bool,
             # Training Phase
 
             model.train()
-            if dim == '2D_LSTM':
+            if dim == '2D_LSTM' or dim=='2D_ViT':
                 model.stacked_resnet.eval()
 
             train_loss = 0
@@ -231,6 +238,10 @@ def train_model(test_name, train_bool,
 
                 if dim == '2D_LSTM':
                     images = (images[0].to(device), images[1].to(device))
+                elif dim == '2D_ViT':
+                    import torch.nn.functional as F
+                    # TODO: replace it with the correct input image that is resized 
+                    images = torch.rand(8, 12, 396, 496)                    
                 else:
                     images = images.to(device)
                 labels = labels.to(device)
@@ -252,8 +263,9 @@ def train_model(test_name, train_bool,
                         signals = torch.cat([signals[:, 1:, out_channel_idx], out[:,j].unsqueeze(1)], dim=1)
                 else:
                     out = model(images)
-                
-                if not (dim=='2D' and mode=='forecasting_lstm'):
+
+                    
+                if not (dim=='2D' and mode=='forecasting_lstm' or dim=='2D_ViT'):
                     out = torch.flatten(out) # era di default, nel caso 2D_24 non serve
 
                 loss = torch.nn.functional.mse_loss(out, labels)
@@ -538,7 +550,7 @@ def main_2d_lstm(args):
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('dim', choices=["1D", "2D", "2D_LSTM"])
+    parser.add_argument('dim', choices=["1D", "2D", "2D_LSTM", "2D_ViT"])
 
     parser.add_argument('--dataset_path', type=str, required=True)
 
@@ -562,7 +574,7 @@ def main():
 
     if args.dim == "1D":
         main_1d(args)
-    elif args.dim == "2D":
+    elif args.dim == "2D" or args.dim == "2D_ViT":
         main_2d(args)
     elif args.dim == "2D_LSTM":
         main_2d_lstm(args)
