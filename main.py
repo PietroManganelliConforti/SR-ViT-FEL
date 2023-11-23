@@ -41,7 +41,6 @@ def collect_data_2D(data_path , transform, device, output_var, train_test_split,
     preprocess = None
     
     dataset = Dataset_2D(data_path=data_path, transform=transform, device=device, output_var=output_var, mode=mode, preprocess=preprocess, variable_to_use=variables_to_use)
-
     print(f'\nNumero di Training samples: {len(dataset)}')
 
     train_dataset, test_dataset = torch.utils.data.random_split(dataset, [len(dataset) - int(len(dataset)*train_test_split), int(len(dataset)*train_test_split)])
@@ -238,10 +237,9 @@ def train_model(test_name, train_bool,
 
                 if dim == '2D_LSTM':
                     images = (images[0].to(device), images[1].to(device))
-                elif dim == '2D_ViT':
-                    import torch.nn.functional as F
-                    # TODO: replace it with the correct input image that is resized 
-                    images = torch.rand(8, 12, 396, 496)                    
+                # elif dim == '2D_ViT':
+                #     # TODO: replace it with the correct input image that is resized 
+                #     #images = torch.rand(8, 12, 396, 496)                    
                 else:
                     images = images.to(device)
                 labels = labels.to(device)
@@ -262,10 +260,11 @@ def train_model(test_name, train_bool,
                         out[:,j] = model(images, signals)
                         signals = torch.cat([signals[:, 1:, out_channel_idx], out[:,j].unsqueeze(1)], dim=1)
                 else:
+                    #print (images.shape)
                     out = model(images)
 
                     
-                if not (dim=='2D' and mode=='forecasting_lstm' or dim=='2D_ViT'):
+                if not ( (dim=='2D' or dim=='2D_ViT') and mode=='forecasting_lstm'):
                     out = torch.flatten(out) # era di default, nel caso 2D_24 non serve
 
                 loss = torch.nn.functional.mse_loss(out, labels)
@@ -285,7 +284,7 @@ def train_model(test_name, train_bool,
             
             with torch.no_grad():
 
-                val_loss, val_rel_err = evaluate_model(model, val_loader,device) 
+                val_loss, val_rel_err = evaluate_model(model, val_loader,device, dim, mode) 
 
                 ret_dict["losses"]["loss_eval"].append(val_loss) 
                 ret_dict["rel_err"]["rel_err_eval"].append(val_rel_err) 

@@ -157,11 +157,11 @@ class ViTForecaster (nn.Module):
         outputs=24,
     ) -> None:
         super().__init__()
-
+        self.mode = mode
         self.conv1x1 = torch.nn.Conv2d(12, 3, kernel_size=1)
+        self.bn1 = nn.BatchNorm2d(3)
 
-
-        # TODO: case 3 -> remove the stacked_resnet
+        #if (self.mode == 'features'):
         self.stacked_resnet = stacked_resnet
         self.stacked_resnet.resnet.fc = nn.Identity()
 
@@ -186,6 +186,7 @@ class ViTForecaster (nn.Module):
         # From (8, 12, 396, 496) to (8, 3, 224, 224) 
         x_img = F.interpolate(x_img, size=(224, 224), mode='bilinear', align_corners=False)
         x_img = self.conv1x1(x_img)
+        x_img = self.bn1(x_img)
 
         L = x_img.shape[2]
         # (N, F)

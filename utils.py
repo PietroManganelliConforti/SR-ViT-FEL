@@ -14,7 +14,7 @@ def hardware_check():
 
 
 
-def evaluate_model(model, loader,device):
+def evaluate_model(model, loader,device, dim, mode):
 
     loss = 0
     rel_err = 0
@@ -23,7 +23,8 @@ def evaluate_model(model, loader,device):
         images = images.to(device)
         labels = labels.to(device)
         out = model(images)
-        out = torch.flatten(out)
+        if not ( (dim=='2D' or dim=='2D_ViT') and mode=='forecasting_lstm'):
+            out = torch.flatten(out)
         loss += torch.nn.functional.mse_loss(out, labels)
         rel_err += ((out - labels) / labels).abs().mean()
 
