@@ -3,6 +3,7 @@ import torch.nn.functional as F
 import torch
 import transformers
 from transformers import ViTModel
+from utils import get_interested_feature_map
 
 class StackedResNet(nn.Module):
 
@@ -152,18 +153,27 @@ class ViTForecaster (nn.Module):
     def __init__(
         self,
         stacked_resnet,
+        dim,
         #channels=11,
         #hidden_size=512,
         outputs=24,
     ) -> None:
         super().__init__()
-        self.mode = mode
-        self.conv1x1 = torch.nn.Conv2d(12, 3, kernel_size=1)
+        self.conv1x1 = torch.nn.Conv2d(64, 3, kernel_size=1)
         self.bn1 = nn.BatchNorm2d(3)
 
-        #if (self.mode == 'features'):
-        self.stacked_resnet = stacked_resnet
-        self.stacked_resnet.resnet.fc = nn.Identity()
+        self.dim = dim
+        if (self.dim == '2D_ViT_im'):
+            self.conv1x1 = torch.nn.Conv2d(12, 3, kernel_size=1)
+            self.bn1 = nn.BatchNorm2d(3)
+        
+        elif (self.dim == '2D_ViT_feat'):
+            self.conv1x1 = torch.nn.Conv2d(64, 3, kernel_size=1)
+            self.bn1 = nn.BatchNorm2d(3)
+            self.stacked_resnet = stacked_resnet
+            self.stacked_resnet.resnet.fc = nn.Identity()
+        
+
 
         model_name = "google/vit-base-patch16-224"
         config = transformers.ViTConfig.from_pretrained(model_name)
@@ -183,16 +193,22 @@ class ViTForecaster (nn.Module):
     # x_img: (N, H, W, C)
     # -> (N, Y)
     def forward(self, x_img):
-        # From (8, 12, 396, 496) to (8, 3, 224, 224) 
-        x_img = F.interpolate(x_img, size=(224, 224), mode='bilinear', align_corners=False)
-        x_img = self.conv1x1(x_img)
-        x_img = self.bn1(x_img)
-
-        L = x_img.shape[2]
-        # (N, F)
-        #features = self.stacked_resnet(x_img)
-        # (N, L, C+F)
-        outputs = self.ViT(x_img).logits
+        
+        if (self.dim == '2D_ViT_im'):
+            # From (8, 12, 396, 496) to (8, 3, 224, 224) 
+            x_img = F.interpolate(x_img, size=(224, 224), mode='bilinear', align_corners=False)
+            x_img = self.conv1x1(x_img)
+            x = self.bn1(x_img)
+            
+        elif (self.dim == '2D_ViT_feat'):
+            feature_map = get_interested_feature_map(self.stacked_resnet, x_img, list(self.stacked_resnet.resnet.children())[-6][1].conv1)
+        
+            # From (8, 12, 396, 496) to (8, 3, 224, 224) 
+            feature_map = F.interpolate(feature_map, size=(224, 224), mode='bilinear', align_corners=False)
+            feature_map = self.conv1x1(feature_map)
+            x = self.bn1(feature_map)
+            
+        outputs = self.ViT(x).logits
 
         return outputs
 

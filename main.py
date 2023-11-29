@@ -165,7 +165,7 @@ def train_model(test_name, train_bool,
             print (summary(model, (1, num_input_channels, 168)))
 
 
-    elif (dim == '2D') or (dim == '2D_LSTM') or (dim == '2D_ViT'):
+    elif (dim == '2D') or (dim == '2D_LSTM') or ('2D_ViT' in dim):
         model = torchvision.models.resnet18(pretrained=True, progress=True)
 
         num_input_channels = len(variables_to_use)  # Number of stacked images in input 
@@ -175,16 +175,19 @@ def train_model(test_name, train_bool,
         if (dim == '2D_LSTM'):
             # freeze stacked resnet
             for param in model.parameters():
-                param.requires_grad = False
+                param.requires_grad = True
 
             model = LSTMForecaster(model, channels=num_input_channels, num_layers=2, hidden_size=512, outputs=1, mode='option1')
 
-        elif (dim == '2D_ViT'):
+        elif (dim == '2D_ViT_im'):
+            model = ViTForecaster(model, dim, outputs=24)
+        elif (dim == '2D_ViT_feat'):
+            # TODO: insert a torch load for loading the stacked resnet
             # freeze stacked resnet
             for param in model.parameters():
                 param.requires_grad = False
 
-            model = ViTForecaster(model, outputs=24)
+            model = ViTForecaster(model, dim, outputs=24)
 
     model = model.to(device)
 
@@ -218,7 +221,7 @@ def train_model(test_name, train_bool,
             # Training Phase
 
             model.train()
-            if dim == '2D_LSTM' or dim=='2D_ViT':
+            if dim == '2D_LSTM' or dim == '2D_ViT_feat':
                 model.stacked_resnet.eval()
 
             train_loss = 0
@@ -236,10 +239,7 @@ def train_model(test_name, train_bool,
                 #         raise Exception()
 
                 if dim == '2D_LSTM':
-                    images = (images[0].to(device), images[1].to(device))
-                # elif dim == '2D_ViT':
-                #     # TODO: replace it with the correct input image that is resized 
-                #     #images = torch.rand(8, 12, 396, 496)                    
+                    images = (images[0].to(device), images[1].to(device))        
                 else:
                     images = images.to(device)
                 labels = labels.to(device)
@@ -264,7 +264,7 @@ def train_model(test_name, train_bool,
                     out = model(images)
 
                     
-                if not ( (dim=='2D' or dim=='2D_ViT') and mode=='forecasting_lstm'):
+                if not ( (dim=='2D' or '2D_ViT' in dim) and mode=='forecasting_lstm'):
                     out = torch.flatten(out) # era di default, nel caso 2D_24 non serve
 
                 loss = torch.nn.functional.mse_loss(out, labels)
@@ -314,10 +314,11 @@ def train_model(test_name, train_bool,
 
     print('\n#----------------------#\n#     Test phase       #\n#----------------------#\n\n')
 
+    #model.load_state_dict(torch.load("results_29_11_old/2D_forecasting_lstm_CO(GT)_ricker_8_['CO(GT)', 'PT08.S1(CO)', 'C6H6(GT)', 'PT08.S2(NMHC)', 'NOx(GT)', 'PT08.S3(NOx)', 'NO2(GT)', 'PT08.S4(NO2)', 'PT08.S5(O3)', 'T', 'RH', 'AH']/best_valLoss_model.pth"))
     model.eval()
-
+    
     with torch.no_grad():
-        test_loss, test_rel_err = evaluate_model(model, test_loader,device) 
+        test_loss, test_rel_err = evaluate_model(model, test_loader,device, dim, mode) 
 
     ret_dict["losses"]["loss_test"].append(test_loss) #a point
     ret_dict["rel_err"]["rel_err_test"].append(test_rel_err) #a point
@@ -549,7 +550,7 @@ def main_2d_lstm(args):
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('dim', choices=["1D", "2D", "2D_LSTM", "2D_ViT"])
+    parser.add_argument('dim', choices=["1D", "2D", "2D_LSTM", "2D_ViT_im", "2D_ViT_feat"])
 
     parser.add_argument('--dataset_path', type=str, required=True)
 
@@ -573,7 +574,7 @@ def main():
 
     if args.dim == "1D":
         main_1d(args)
-    elif args.dim == "2D" or args.dim == "2D_ViT":
+    elif args.dim == "2D" or '2D_ViT' in args.dim:
         main_2d(args)
     elif args.dim == "2D_LSTM":
         main_2d_lstm(args)

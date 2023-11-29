@@ -6,6 +6,7 @@ from torchsummary import summary
 from datasets import *
 
 import torch
+from torch import nn
 
 # Load a pre-trained ResNet model
 
@@ -14,7 +15,7 @@ model = torchvision.models.resnet18(pretrained=True, progress=True)
 num_input_channels = 12  # Number of stacked images in input 
 
 model = StackedResNet(num_input_channels, num_output_features=24, resnet=model)
-
+print (model)
 # Remove the fully connected layers (classification layers) from the model
 #model = torch.nn.Sequential(*(list(model.children())[:-2]))
 
@@ -40,11 +41,7 @@ def get_interested_feature_map(model, x, target_layer):
 
     return feature_map
 
-# Example usage
-if __name__ == "__main__":
-    # Load an example image
-    image = torch.rand(8, 12, 396, 496)  # Replace with your image dimensions
-
+    """
     # Specify the layer from which you want to extract feature maps
     target_layer = list(model.resnet.children())[-3][1].conv1 #model[-1][1]
 
@@ -52,4 +49,32 @@ if __name__ == "__main__":
     feature_map = get_interested_feature_map(model, image, target_layer)
 
     print("Feature map shape:", feature_map.shape)
-    
+    """
+
+def is_iterable(obj):
+    try:
+        iter(obj)
+        return True
+    except TypeError:
+        return False
+
+# Example usage
+if __name__ == "__main__":
+    # Load an example image
+    image = torch.rand(8, 12, 396, 496)  # Replace with your image dimensions
+
+    """
+    for layer in list(model.resnet.children()):
+        if (type(layer) == torch.nn.Sequential):
+            for elem in layer:
+                for e in list(elem.children()):
+                    if (type(e) != torch.nn.Sequential):
+                        print (e)
+                        
+    """
+    target_layer = list(model.resnet.children())[-6][1].conv1 #model[-1][1]
+
+    # Get the feature map from the specified layer
+    feature_map = get_interested_feature_map(model, image, target_layer)
+
+    print("Feature map shape:", feature_map.shape)

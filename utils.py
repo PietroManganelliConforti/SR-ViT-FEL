@@ -23,7 +23,7 @@ def evaluate_model(model, loader,device, dim, mode):
         images = images.to(device)
         labels = labels.to(device)
         out = model(images)
-        if not ( (dim=='2D' or dim=='2D_ViT') and mode=='forecasting_lstm'):
+        if not ( (dim=='2D' or '2D_ViT' in dim) and mode=='forecasting_lstm'):
             out = torch.flatten(out)
         loss += torch.nn.functional.mse_loss(out, labels)
         rel_err += ((out - labels) / labels).abs().mean()
@@ -123,3 +123,22 @@ test_ret = {
 save_plots_and_report(test_ret,"","da_canc", True)
 """
 
+
+# Define a function to extract feature maps
+def get_interested_feature_map(model, x, target_layer):
+    # Register a hook to get the feature maps at the desired layer
+    feature_map = None
+
+    def hook(module, input, output):
+        nonlocal feature_map
+        feature_map = output
+
+    hook_handle = target_layer.register_forward_hook(hook)
+
+    # Forward pass to compute the feature maps
+    model(x)
+
+    # Remove the hook to prevent it from being called again
+    hook_handle.remove()
+
+    return feature_map
