@@ -179,11 +179,12 @@ def train_model(test_name, train_bool,
 
             model = LSTMForecaster(model, channels=num_input_channels, num_layers=2, hidden_size=512, outputs=1, mode='option1')
 
-        elif (dim == '2D_ViT_im'):
+        elif (dim == '2D_ViT_im' or dim == '2D_ViT_parallel_SR'):
             model = ViTForecaster(model, dim, outputs=24)
         elif (dim == '2D_ViT_feat'):
-            # TODO: insert a torch load for loading the stacked resnet
-            # freeze stacked resnet
+            print ("Model pretrained for Resnet18")
+            model.load_state_dict(torch.load("StackedResnet_24output/best_valRelerr_model.pth"))
+            # unfreeze stacked resnet
             for param in model.parameters():
                 param.requires_grad = False
 
@@ -221,7 +222,7 @@ def train_model(test_name, train_bool,
             # Training Phase
 
             model.train()
-            if dim == '2D_LSTM' or dim == '2D_ViT_feat':
+            if dim == '2D_LSTM' or dim == '2D_ViT_feat': # ViT_feat usually commented
                 model.stacked_resnet.eval()
 
             train_loss = 0
@@ -314,7 +315,7 @@ def train_model(test_name, train_bool,
 
     print('\n#----------------------#\n#     Test phase       #\n#----------------------#\n\n')
 
-    #model.load_state_dict(torch.load("results_29_11_old/2D_forecasting_lstm_CO(GT)_ricker_8_['CO(GT)', 'PT08.S1(CO)', 'C6H6(GT)', 'PT08.S2(NMHC)', 'NOx(GT)', 'PT08.S3(NOx)', 'NO2(GT)', 'PT08.S4(NO2)', 'PT08.S5(O3)', 'T', 'RH', 'AH']/best_valLoss_model.pth"))
+    model.load_state_dict(torch.load("results_07_12_ViT_parallel_SR/2D_forecasting_lstm_CO(GT)_ricker_8_['CO(GT)', 'PT08.S1(CO)', 'C6H6(GT)', 'PT08.S2(NMHC)', 'NOx(GT)', 'PT08.S3(NOx)', 'NO2(GT)', 'PT08.S4(NO2)', 'PT08.S5(O3)', 'T', 'RH', 'AH']/best_valRelerr_model.pth"))
     model.eval()
     
     with torch.no_grad():
@@ -550,7 +551,7 @@ def main_2d_lstm(args):
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('dim', choices=["1D", "2D", "2D_LSTM", "2D_ViT_im", "2D_ViT_feat"])
+    parser.add_argument('dim', choices=["1D", "2D", "2D_LSTM", "2D_ViT_im", "2D_ViT_feat", "2D_ViT_parallel_SR"])
 
     parser.add_argument('--dataset_path', type=str, required=True)
 

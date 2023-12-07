@@ -159,36 +159,48 @@ class ViTForecaster (nn.Module):
         outputs=24,
     ) -> None:
         super().__init__()
-        self.conv1x1 = torch.nn.Conv2d(64, 3, kernel_size=1)
-        self.bn1 = nn.BatchNorm2d(3)
 
         self.dim = dim
+        
+        
+        model_name = "google/vit-base-patch16-224"
+        config = transformers.ViTConfig.from_pretrained(model_name)
+        
+        # TODO: can we use this config update to avoid interpolation?
+        #config.update({'num_channels': 12})
+        # config.update({'image_size': (396,496)})
+        # config.update({'patch_size': (8,1)})
+        
+        self.ViT = transformers.ViTForImageClassification.from_pretrained(model_name, config=config, ignore_mismatched_sizes=True)        
+        #model.vit.embeddings.patch_embeddings.projection = torch.nn.Conv2d(512, 768, kernel_size=(8, 1), stride=(8, 1), padding=(0,0), groups=256)
+        self.ViT.classifier=torch.nn.Sequential(torch.nn.Linear(768,1000,bias=True),
+                                       torch.nn.Dropout(p=0.1),
+                                       torch.nn.Linear(1000,outputs,bias=True))        
+        
         if (self.dim == '2D_ViT_im'):
             self.conv1x1 = torch.nn.Conv2d(12, 3, kernel_size=1)
             self.bn1 = nn.BatchNorm2d(3)
         
         elif (self.dim == '2D_ViT_feat'):
-            self.conv1x1 = torch.nn.Conv2d(64, 3, kernel_size=1)
-            self.bn1 = nn.BatchNorm2d(3)
+            self.conv1x1_1 = torch.nn.Conv2d(256, 128, kernel_size=1)
+            self.bn1 = nn.BatchNorm2d(128)
+            self.conv1x1_2 = torch.nn.Conv2d(128, 64, kernel_size=1)
+            self.bn2 = nn.BatchNorm2d(64)
+            self.conv1x1_3 = torch.nn.Conv2d(64, 3, kernel_size=1)
+            self.bn3 = nn.BatchNorm2d(3)
             self.stacked_resnet = stacked_resnet
             self.stacked_resnet.resnet.fc = nn.Identity()
-        
-
-
-        model_name = "google/vit-base-patch16-224"
-        config = transformers.ViTConfig.from_pretrained(model_name)
-        
-        # TODO: can we use this config update to avoid interpolation?
-        # config.update({'num_channels': 256})
-        # config.update({'image_size': (129,14)})
-        # config.update({'patch_size': (8,1)})
-        
-        model = transformers.ViTForImageClassification.from_pretrained(model_name, config=config, ignore_mismatched_sizes=True)        
-        #model.vit.embeddings.patch_embeddings.projection = torch.nn.Conv2d(512, 768, kernel_size=(8, 1), stride=(8, 1), padding=(0,0), groups=256)
-        model.classifier=torch.nn.Sequential(torch.nn.Linear(768,1000,bias=True),
-                                       torch.nn.Dropout(p=0.1),
-                                       torch.nn.Linear(1000,outputs,bias=True))
-        self.ViT = model
+            
+        elif (self.dim == '2D_ViT_parallel_SR'):
+            self.stacked_resnet = stacked_resnet
+            self.stacked_resnet.resnet.fc = nn.Identity()
+            
+            self.conv1x1 = torch.nn.Conv2d(12, 3, kernel_size=1)
+            self.bn1 = nn.BatchNorm2d(3)
+            self.ViT.classifier = torch.nn.Sequential(torch.nn.Linear(768,512,bias=True),torch.nn.Dropout(p=0.1), torch.nn.ReLU())
+            
+            self.classifier = torch.nn.Sequential(torch.nn.Linear(512*2,24,bias=True))
+    
 
     # x_img: (N, H, W, C)
     # -> (N, Y)
@@ -199,16 +211,61 @@ class ViTForecaster (nn.Module):
             x_img = F.interpolate(x_img, size=(224, 224), mode='bilinear', align_corners=False)
             x_img = self.conv1x1(x_img)
             x = self.bn1(x_img)
+            x = x_img
+            outputs = self.ViT(x, interpolate_pos_encoding=True).logits
+
             
         elif (self.dim == '2D_ViT_feat'):
-            feature_map = get_interested_feature_map(self.stacked_resnet, x_img, list(self.stacked_resnet.resnet.children())[-6][1].conv1)
-        
-            # From (8, 12, 396, 496) to (8, 3, 224, 224) 
-            feature_map = F.interpolate(feature_map, size=(224, 224), mode='bilinear', align_corners=False)
-            feature_map = self.conv1x1(feature_map)
-            x = self.bn1(feature_map)
+            # Solution 29_11_ViT_feat
+            #feature_map = get_interested_feature_map(self.stacked_resnet, x_img, list(self.stacked_resnet.resnet.children())[-6][1].conv1)
+                
             
-        outputs = self.ViT(x).logits
+            tensor1 = get_interested_feature_map(self.stacked_resnet, x_img, list(self.stacked_resnet.resnet.children())[-4][-1].conv1)
+            tensor2 = get_interested_feature_map(self.stacked_resnet, x_img, list(self.stacked_resnet.resnet.children())[-4][-1].conv2)
+            tensor3 = get_interested_feature_map(self.stacked_resnet, x_img, list(self.stacked_resnet.resnet.children())[-4][-2].conv1)
+            tensor4 = get_interested_feature_map(self.stacked_resnet, x_img, list(self.stacked_resnet.resnet.children())[-4][-2].conv2)
+            
+            
+            # Define the new shape (assuming height and width are both doubled)
+            new_height = tensor1.shape[2] * 2
+            new_width = tensor1.shape[3] * 2
+            
+            merged_tensor = torch.zeros(x_img.shape[0], tensor1.shape[1], new_height, new_width).to('cuda')
+            # Fill in each corner with the corresponding tensor
+            merged_tensor[:, :, :tensor1.shape[2], :tensor1.shape[3]] = tensor1  # Upper-left corner
+            merged_tensor[:, :, :tensor2.shape[2], -tensor2.shape[3]:] = tensor2  # Upper-right corner
+            merged_tensor[:, :, -tensor3.shape[2]:, :tensor3.shape[3]] = tensor3  # Lower-left corner
+            merged_tensor[:, :, -tensor4.shape[2]:, -tensor4.shape[3]:] = tensor4  # Lower-right corner
 
+            #print("Merged Tensor Shape:", merged_tensor.shape) # [8, 256, 48, 62]
+         
+            #merged_tensor = torch.cat((tensor1, tensor2, tensor3, tensor4), dim=1)
+            
+            x = self.conv1x1_1(merged_tensor)
+            x = self.bn1(x)
+            x = self.conv1x1_2(x)
+            x = self.bn2(x)
+            x = self.conv1x1_3(x)
+            x = self.bn3(x)
+            
+            
+            # From (8, 12, 396, 496) to (8, 3, 224, 224) 
+            x = F.interpolate(x, size=(224, 224), mode='bilinear', align_corners=False)
+            outputs = self.ViT(x, interpolate_pos_encoding=True).logits
+
+        elif (self.dim == '2D_ViT_parallel_SR'):
+            x_sr = self.stacked_resnet(x_img)
+            
+            x_img = F.interpolate(x_img, size=(224, 224), mode='bilinear', align_corners=False)
+            x_img = self.conv1x1(x_img)
+            x_img = self.bn1(x_img)
+            x_vit = self.ViT(x_img).logits
+            
+            
+            x = torch.cat((x_sr, x_vit), 1)
+            outputs = self.classifier(x)
+
+            
+        
         return outputs
 

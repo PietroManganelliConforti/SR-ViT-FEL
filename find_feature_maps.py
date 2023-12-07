@@ -66,15 +66,41 @@ if __name__ == "__main__":
     """
     for layer in list(model.resnet.children()):
         if (type(layer) == torch.nn.Sequential):
-            for elem in layer:
-                for e in list(elem.children()):
+            for i, elem in enumerate(layer):
+                for j, e in enumerate(list(elem.children())):
                     if (type(e) != torch.nn.Sequential):
-                        print (e)
-                        
-    """
-    target_layer = list(model.resnet.children())[-6][1].conv1 #model[-1][1]
-
-    # Get the feature map from the specified layer
+                        feature_map = get_interested_feature_map(model, image, e)
+                        print ("[{}][{}].{} SHAPE: {}".format(i, j, e, feature_map.shape))
+    """        
+    
+    target_layer = list(model.resnet.children())[-3][-1].conv2 #model[-1][1]
     feature_map = get_interested_feature_map(model, image, target_layer)
+    print("Feature map shape:", feature_map.shape)
+    
+    target_layer = list(model.resnet.children())[-3][-1].conv1 #model[-1][1]
+    feature_map = get_interested_feature_map(model, image, target_layer)
+    print("Feature map shape:", feature_map.shape)
+    
+    target_layer = list(model.resnet.children())[-3][-2].conv2 #model[-1][1]
+    feature_map = get_interested_feature_map(model, image, target_layer)
+    print("Feature map shape:", feature_map.shape)
+    
+    target_layer = list(model.resnet.children())[-3][-2].conv1 #model[-1][1]
+    feature_map = get_interested_feature_map(model, image, target_layer)
+    print("Feature map shape:", feature_map.shape)
+    
+    target_layer = list(model.resnet.children())[-4][-1].conv1 #model[-1][1]
+    feature_map = get_interested_feature_map(model, image, target_layer)
+    print("Feature map shape:", feature_map.shape)
+    
+    target_layer = list(model.resnet.children())[-4][-1].conv2 #model[-1][1]
+    feature_map = get_interested_feature_map(model, image, target_layer)
+    print("Feature map shape:", feature_map.shape)
+    
+    target_layer = list(model.resnet.children())[-4][-2].conv1 #model[-1][1]
+    feature_map = get_interested_feature_map(model, image, target_layer)
+    print("Feature map shape:", feature_map.shape)    
 
+    target_layer = list(model.resnet.children())[-4][-2].conv2 #model[-1][1]
+    feature_map = get_interested_feature_map(model, image, target_layer)
     print("Feature map shape:", feature_map.shape)
