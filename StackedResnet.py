@@ -181,7 +181,7 @@ class ViTForecaster (nn.Module):
             self.conv1x1 = torch.nn.Conv2d(12, 3, kernel_size=1)
             self.bn1 = nn.BatchNorm2d(3)
         
-        elif (self.dim == '2D_ViT_feat'):
+        elif (self.dim == '2D_ViT_feat_puzzle'):
             self.conv1x1_1 = torch.nn.Conv2d(256, 128, kernel_size=1)
             self.bn1 = nn.BatchNorm2d(128)
             self.conv1x1_2 = torch.nn.Conv2d(128, 64, kernel_size=1)
@@ -207,18 +207,14 @@ class ViTForecaster (nn.Module):
     def forward(self, x_img):
         
         if (self.dim == '2D_ViT_im'):
+            x = self.conv1x1(x_img)
+            x = self.bn1(x)
             # From (8, 12, 396, 496) to (8, 3, 224, 224) 
-            x_img = F.interpolate(x_img, size=(224, 224), mode='bilinear', align_corners=False)
-            x_img = self.conv1x1(x_img)
-            x = self.bn1(x_img)
-            x = x_img
+            x = F.interpolate(x, size=(224, 224), mode='bilinear', align_corners=False)
             outputs = self.ViT(x, interpolate_pos_encoding=True).logits
-
-            
-        elif (self.dim == '2D_ViT_feat'):
-            # Solution 29_11_ViT_feat
-            #feature_map = get_interested_feature_map(self.stacked_resnet, x_img, list(self.stacked_resnet.resnet.children())[-6][1].conv1)
-                
+           
+        elif (self.dim == '2D_ViT_feat_puzzle'):
+            # Solution 29_11_ViT_feat                
             
             tensor1 = get_interested_feature_map(self.stacked_resnet, x_img, list(self.stacked_resnet.resnet.children())[-4][-1].conv1)
             tensor2 = get_interested_feature_map(self.stacked_resnet, x_img, list(self.stacked_resnet.resnet.children())[-4][-1].conv2)
