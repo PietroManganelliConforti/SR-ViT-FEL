@@ -16,6 +16,7 @@ from BaselineArchitectures import Stacked2DLinear, Stacked1DLinear, LSTMLinear
 from torchsummary import summary
 import time
 from datasets import *
+from augmentation import CWTAugmentation
 
 class Normalize(object): # not used anymore
     def __init__(self, mean=[0 for i in range(12)], std=[1 for i in range(12)]):
@@ -43,6 +44,7 @@ def collect_data_2D(data_path , transform, device, output_var, train_test_split,
     dataset = Dataset_2D(data_path=data_path, transform=transform, device=device, output_var=output_var, mode=mode, preprocess=preprocess, variable_to_use=variables_to_use)
     print(f'\nNumero di Training samples: {len(dataset)}')
 
+
     train_dataset, test_dataset = torch.utils.data.random_split(dataset, [len(dataset) - int(len(dataset)*train_test_split), int(len(dataset)*train_test_split)])
     
     train_dataset, val_dataset = torch.utils.data.random_split(train_dataset, [len(train_dataset) - int(len(train_dataset)*train_val_split), int(len(train_dataset)*train_val_split)])
@@ -64,7 +66,7 @@ def collect_data_2D_lstm(data_path , transform, device, output_var, train_test_s
     #                             Normalize(0,1)
     #                         ])
 
-    preprocess = None
+    preprocess = CWTAugmentation()
     
     dataset = Dataset_2D(data_path=data_path, transform=transform, device=device, output_var=output_var, mode=mode, preprocess=preprocess, variable_to_use=variables_to_use)
     #print(list(dataset.windows[0].keys()))

@@ -49,9 +49,10 @@ class CWTAugmentation:
         cwt_image = self.zoom(cwt_image, zoom_factor)
 
         # # Random brightness and contrast adjustment
-        # brightness_factor = np.random.uniform(*self.brightness_range)
-        # contrast_factor = np.random.uniform(*self.contrast_range)
-        # cwt_image = self.adjust_brightness_contrast(cwt_image, brightness_factor, contrast_factor)
+        brightness_factor = np.random.uniform(*self.brightness_range)
+        contrast_factor = np.random.uniform(*self.contrast_range)
+        for i in range(cwt_image.size(0)):   
+            cwt_image[i] = self.adjust_brightness_contrast(cwt_image[i].unsqueeze(0), brightness_factor, contrast_factor).squeeze(0)
 
         # Add Gaussian noise
         cwt_image = self.add_noise(cwt_image,self.noise_std )
@@ -61,40 +62,28 @@ class CWTAugmentation:
 
         return cwt_image
 
-    @staticmethod
+
     def rotate(image, angle):
-        # Rotate the image using PyTorch
         return transforms.functional.rotate(image, angle)
 
-    @staticmethod
     def scale(image, scale_factor):
-        # Scale the image using PyTorch
         return transforms.functional.affine(image, angle=0, translate=(0, 0), scale=scale_factor, shear=0)
 
-    @staticmethod
     def translate(image, translation):
-        # Translate the image using PyTorch
         return transforms.functional.affine(image, angle=0, translate=translation, scale=1, shear=0)
 
-    @staticmethod
     def zoom(image, zoom_factor):
-        # Zoom the image using PyTorch
         return transforms.functional.affine(image, angle=0, translate=(0, 0), scale=zoom_factor, shear=0)
 
-    @staticmethod
     def adjust_brightness_contrast(image, brightness_factor, contrast_factor):
-        # Adjust brightness and contrast using PyTorch
         return transforms.functional.adjust_brightness(transforms.functional.adjust_contrast(image, contrast_factor),
                                                       brightness_factor)
 
-    @staticmethod
     def add_noise(image,noise_std):
-        # Add Gaussian noise using PyTorch
         noise = torch.randn_like(image) * noise_std
         return image + noise
 
     def elastic_transform(self, image):
-        # Elastic transformations using PyTorch
         alpha = image.size(1) * self.elastic_alpha
         sigma = image.size(1) * self.elastic_sigma
 
@@ -173,33 +162,33 @@ def save_one_12dim_sample(image_name):
 
 if __name__ == "__main__":
 
-    #cwt_image =  save_one_12dim_sample('cwt_images.pt')  ## uncomment to return AND save a sample cwt_image ##
+    cwt_image =  save_one_12dim_sample('cwt_images.pt')  ## uncomment to return AND save a sample cwt_image ##
 
-    loaded_cwt_image = torch.load('cwt_images.pt')
+    #cwt_image = torch.load('cwt_images.pt')
 
-    show_12dim_sample(loaded_cwt_image)
+    show_12dim_sample(cwt_image)
 
     # # Load cwt_image
-    # loaded_cwt_image = torch.load('cwt_image.pt').unsqueeze(1)
+    # cwt_image = torch.load('cwt_image.pt').unsqueeze(1)
 
-    # # Print the shape of loaded_cwt_image
-    # print(loaded_cwt_image.shape)
+    # # Print the shape of cwt_image
+    # print(cwt_image.shape)
 
-    # plt.imshow(loaded_cwt_image)
+    # plt.imshow(cwt_image)
     # plt.show()
 
     # random_image = torch.randn(12, 369, 496) #torch.Size([1, 369, 496]) funziona
 
-    # print(random_image.shape, loaded_cwt_image.shape, loaded_cwt_image.unsqueeze(0).shape)
+    # print(random_image.shape, cwt_image.shape, cwt_image.unsqueeze(0).shape)
 
     # angle = np.random.uniform(-2, 2)
     # cwt_image = transforms.functional.rotate(random_image, angle)
 
     # show_12dim_sample(cwt_image)
 
-    transform = transforms.Compose([CWTAugmentation()])
+    transform = CWTAugmentation()
 
-    for i in range(100): augmented_image = transform(loaded_cwt_image)
+    for i in range(2): augmented_image = transform(cwt_image)
 
     show_12dim_sample(augmented_image.squeeze(1))
 
