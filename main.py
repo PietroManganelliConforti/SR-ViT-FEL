@@ -39,7 +39,7 @@ def collect_data_2D(data_path , transform, device, output_var, train_test_split,
     #                             Normalize(0,1)
     #                         ])
 
-    preprocess = None
+    preprocess = CWTAugmentation()
     
     dataset = Dataset_2D(data_path=data_path, transform=transform, device=device, output_var=output_var, mode=mode, preprocess=preprocess, variable_to_use=variables_to_use)
     print(f'\nNumero di Training samples: {len(dataset)}')
@@ -292,7 +292,7 @@ def train_model(test_name, train_bool,
                 ret_dict["losses"]["loss_eval"].append(val_loss) 
                 ret_dict["rel_err"]["rel_err_eval"].append(val_rel_err) 
             
-            print("[EPOCH "+str(epoch)+"]","Val_loss: ", val_loss)
+            print("[EPOCH "+str(epoch)+"]","Val_loss: ", val_loss, ",  Val_rel_err: ", val_rel_err)
 
             if epoch > 49 and val_loss < best_val_loss:
 
@@ -448,7 +448,7 @@ def main_2d(args):
 
     lr = 1e-5
 
-    epoch = 100
+    epoch = 500
 
     num_output_features = 24 if args.mode == "forecasting_lstm" else 1
 

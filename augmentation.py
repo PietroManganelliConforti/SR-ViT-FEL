@@ -8,7 +8,9 @@ import os
 from utils import hardware_check
 import torchvision.utils as vutils
 
+
 class CWTAugmentation:
+
     def __init__(self, rotation_range=5, scale_range=(0.9, 1.1), translation_range=(0.1, 0.1),
                  zoom_range=(0.9, 1.1), brightness_range=(0.8, 1.2), contrast_range=(0.8, 1.2),
                  noise_std=0.05, elastic_alpha=1, elastic_sigma=0.1):
@@ -23,7 +25,6 @@ class CWTAugmentation:
         self.elastic_sigma = elastic_sigma
 
     def app(self, cwt_image):
-
         for i in range(cwt_image.size(0)):
             cwt_image[i,:,:] = self.apply_transform(cwt_image[i,:,:])
         
@@ -34,52 +35,52 @@ class CWTAugmentation:
         # Random rotation 
         angle = np.random.uniform(-self.rotation_range, self.rotation_range)
         cwt_image = self.rotate(cwt_image, angle)
-
+        
         # Random scaling
         scale_factor = np.random.uniform(*self.scale_range)
         cwt_image = self.scale(cwt_image, scale_factor)
-
+        
         # Random translation
         translation = (np.random.uniform(-self.translation_range[0], self.translation_range[0]),
                        np.random.uniform(-self.translation_range[1], self.translation_range[1]))
         cwt_image = self.translate(cwt_image, translation)
-
+        
         # Random zoom
         zoom_factor = np.random.uniform(*self.zoom_range)
         cwt_image = self.zoom(cwt_image, zoom_factor)
-
+        
         # # Random brightness and contrast adjustment
         brightness_factor = np.random.uniform(*self.brightness_range)
         contrast_factor = np.random.uniform(*self.contrast_range)
         for i in range(cwt_image.size(0)):   
             cwt_image[i] = self.adjust_brightness_contrast(cwt_image[i].unsqueeze(0), brightness_factor, contrast_factor).squeeze(0)
-
+        
         # Add Gaussian noise
         cwt_image = self.add_noise(cwt_image,self.noise_std )
-
+        
         # Elastic transformations
         cwt_image = self.elastic_transform(cwt_image)
-
+        
         return cwt_image
 
 
-    def rotate(image, angle):
+    def rotate(self, image, angle):
         return transforms.functional.rotate(image, angle)
 
-    def scale(image, scale_factor):
+    def scale(self, image, scale_factor):
         return transforms.functional.affine(image, angle=0, translate=(0, 0), scale=scale_factor, shear=0)
 
-    def translate(image, translation):
+    def translate(self, image, translation):
         return transforms.functional.affine(image, angle=0, translate=translation, scale=1, shear=0)
 
-    def zoom(image, zoom_factor):
+    def zoom(self, image, zoom_factor):
         return transforms.functional.affine(image, angle=0, translate=(0, 0), scale=zoom_factor, shear=0)
 
-    def adjust_brightness_contrast(image, brightness_factor, contrast_factor):
+    def adjust_brightness_contrast(self, image, brightness_factor, contrast_factor):
         return transforms.functional.adjust_brightness(transforms.functional.adjust_contrast(image, contrast_factor),
                                                       brightness_factor)
 
-    def add_noise(image,noise_std):
+    def add_noise(self, image,noise_std):
         noise = torch.randn_like(image) * noise_std
         return image + noise
 
@@ -102,6 +103,7 @@ class CWTAugmentation:
 
         return torch.from_numpy(distorted_image)
 
+
 def show_12dim_sample(cwt_image):
     # Reshape the cwt_image to have shape (12, 1, H, W)
     cwt_image = cwt_image.view(12, 1, cwt_image.shape[1], cwt_image.shape[2])
@@ -122,7 +124,7 @@ def show_12dim_sample(cwt_image):
 
 
 
-def save_one_12dim_sample(image_name):
+def save_and_return_one_12dim_sample(image_name):
 
     data_path = 'datasets/2D'
     output_var = 'CO(GT)'
@@ -131,7 +133,8 @@ def save_one_12dim_sample(image_name):
     device = 'cpu'
     preprocess = None
     variables_to_use = ['CO(GT)', 'PT08.S1(CO)', 'C6H6(GT)', 'PT08.S2(NMHC)',
-                        'NOx(GT)', 'PT08.S3(NOx)', 'NO2(GT)', 'PT08.S4(NO2)', 'PT08.S5(O3)', 'T', 'RH', 'AH']
+                        'NOx(GT)', 'PT08.S3(NOx)', 'NO2(GT)', 'PT08.S4(NO2)', 
+                        'PT08.S5(O3)', 'T', 'RH', 'AH']
 
     device = 0 if torch.cuda.is_available() else 'cpu'
     device = hardware_check()
@@ -162,11 +165,11 @@ def save_one_12dim_sample(image_name):
 
 if __name__ == "__main__":
 
-    cwt_image =  save_one_12dim_sample('cwt_images.pt')  ## uncomment to return AND save a sample cwt_image ##
+    cwt_image =  save_and_return_one_12dim_sample('cwt_images.pt')  ## uncomment to return AND save a sample cwt_image ##
 
     #cwt_image = torch.load('cwt_images.pt')
 
-    show_12dim_sample(cwt_image)
+    #show_12dim_sample(cwt_image)
 
     # # Load cwt_image
     # cwt_image = torch.load('cwt_image.pt').unsqueeze(1)
@@ -177,14 +180,14 @@ if __name__ == "__main__":
     # plt.imshow(cwt_image)
     # plt.show()
 
-    # random_image = torch.randn(12, 369, 496) #torch.Size([1, 369, 496]) funziona
+    #cwt_image = torch.randn(12, 369, 496) #torch.Size([1, 369, 496]) funziona
 
-    # print(random_image.shape, cwt_image.shape, cwt_image.unsqueeze(0).shape)
+    print("cwt_image.shape: ", cwt_image.shape)
 
-    # angle = np.random.uniform(-2, 2)
-    # cwt_image = transforms.functional.rotate(random_image, angle)
+    angle = np.random.uniform(-2, 2)
+    cwt_image = transforms.functional.rotate(cwt_image, angle)
 
-    # show_12dim_sample(cwt_image)
+    #show_12dim_sample(cwt_image)
 
     transform = CWTAugmentation()
 
@@ -192,3 +195,18 @@ if __name__ == "__main__":
 
     show_12dim_sample(augmented_image.squeeze(1))
 
+
+
+"""
+time delle funzioni di augmentation eseguite
+
+os time posix.times_result(user=91.38, system=70.34, children_user=0.0, children_system=0.08, elapsed=17195364.72) 1
+os time posix.times_result(user=91.67, system=70.34, children_user=0.0, children_system=0.08, elapsed=17195364.74) 2
+os time posix.times_result(user=92.0, system=70.34, children_user=0.0, children_system=0.08, elapsed=17195364.77) 3
+os time posix.times_result(user=92.34, system=70.34, children_user=0.0, children_system=0.08, elapsed=17195364.79) 4
+os time posix.times_result(user=92.67, system=70.34, children_user=0.0, children_system=0.08, elapsed=17195364.82) 5
+os time posix.times_result(user=92.89, system=70.34, children_user=0.0, children_system=0.08, elapsed=17195364.83) 6
+os time posix.times_result(user=93.78, system=70.34, children_user=0.0, children_system=0.08, elapsed=17195364.91) 7
+os time posix.times_result(user=97.19, system=70.34, children_user=0.0, children_system=0.08, elapsed=17195367.24) 8
+
+"""
