@@ -80,7 +80,7 @@ class CWTAugmentation:
         return transforms.functional.adjust_brightness(transforms.functional.adjust_contrast(image, contrast_factor),
                                                       brightness_factor)
 
-    def add_noise(self, image,noise_std):
+    def add_noise(self, image, noise_std):
         noise = torch.randn_like(image) * noise_std
         return image + noise
 

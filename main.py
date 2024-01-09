@@ -31,30 +31,64 @@ class Normalize(object): # not used anymore
 
         return tensor
 
-def collect_data_2D(data_path , transform, device, output_var, train_test_split, train_val_split, mode, batch_size, variables_to_use): 
+def collect_data_2D(data_path , transform, device, output_var, train_test_split, train_val_split, mode, batch_size, variables_to_use, cross_validation_idx, cross_val_split): 
 
 
 
-    # preprocess = tr.Compose([
+    preprocess = None
+    #tr.Compose([
     #                             Normalize(0,1)
     #                         ])
 
-    preprocess = CWTAugmentation()
+    #preprocess = CWTAugmentation()
     
     dataset = Dataset_2D(data_path=data_path, transform=transform, device=device, output_var=output_var, mode=mode, preprocess=preprocess, variable_to_use=variables_to_use)
-    print(f'\nNumero di Training samples: {len(dataset)}')
-
-
-    train_dataset, test_dataset = torch.utils.data.random_split(dataset, [len(dataset) - int(len(dataset)*train_test_split), int(len(dataset)*train_test_split)])
     
-    train_dataset, val_dataset = torch.utils.data.random_split(train_dataset, [len(train_dataset) - int(len(train_dataset)*train_val_split), int(len(train_dataset)*train_val_split)])
-    
-    print(f'Ther are: {len(train_dataset)} training samples, {len(val_dataset)} validation samples and {len(test_dataset)} test samples')
+    len_dataset = len(dataset)
 
-    # create dataloaders
-    train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=1)
-    val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=1)
-    test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
+    print(f'\nNumero di Training samples: {len_dataset}')
+
+    if cross_validation_idx != -1:
+
+        indices = np.arange(len_dataset)
+        
+        
+        fold_size = len_dataset // cross_val_split
+        remaining = len_dataset % cross_val_split
+        
+
+        start = fold_size * cross_validation_idx
+    
+        end = start + fold_size #+ (remaining if cross_val_split == cross_validation_idx+1 else 0)
+
+        test_indices = indices[start:end]
+
+        train_indices = np.concatenate([indices[:start], indices[end:]])
+        
+            
+        fold_train_dataset = torch.utils.data.Subset(dataset, train_indices)
+        fold_val_dataset = torch.utils.data.Subset(dataset, test_indices)
+        
+        train_data_loader = torch.utils.data.DataLoader(fold_train_dataset, batch_size=batch_size, shuffle=True, num_workers=1)
+        val_data_loader = torch.utils.data.DataLoader(fold_val_dataset, batch_size=batch_size, shuffle=True, num_workers=1)
+        test_data_loader = torch.utils.data.DataLoader(fold_val_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
+
+        print(f'There are: {len(fold_train_dataset)} training samples, {len(fold_val_dataset)} validation samples and {len(fold_val_dataset)} test samples')
+        print(f'start: {start}, end: {end}, len_dataset: {len_dataset}')
+        print(f'Ther are: {len(train_data_loader)*batch_size} training samples, {len(val_data_loader)*batch_size} validation samples and {len(test_data_loader)*batch_size} test samples')
+
+    else :
+
+        train_dataset, test_dataset = torch.utils.data.random_split(dataset, [len(dataset) - int(len(dataset)*train_test_split), int(len(dataset)*train_test_split)])
+        
+        train_dataset, val_dataset = torch.utils.data.random_split(train_dataset, [len(train_dataset) - int(len(train_dataset)*train_val_split), int(len(train_dataset)*train_val_split)])
+    
+        print(f'Ther are: {len(train_dataset)} training samples, {len(val_dataset)} validation samples and {len(test_dataset)} test samples')
+
+        # create dataloaders
+        train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=1)
+        val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=1)
+        test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
 
     return train_data_loader, val_data_loader, test_data_loader
 
@@ -62,11 +96,13 @@ def collect_data_2D(data_path , transform, device, output_var, train_test_split,
 
 def collect_data_2D_lstm(data_path , transform, device, output_var, train_test_split, train_val_split, mode, batch_size, variables_to_use, csv_file): 
 
-    # preprocess = tr.Compose([
+    preprocess = None
+    
+    #tr.Compose([
     #                             Normalize(0,1)
-    #                         ])
+    #                        ])
 
-    preprocess = CWTAugmentation()
+    #preprocess = CWTAugmentation()
     
     dataset = Dataset_2D(data_path=data_path, transform=transform, device=device, output_var=output_var, mode=mode, preprocess=preprocess, variable_to_use=variables_to_use)
     #print(list(dataset.windows[0].keys()))
@@ -114,7 +150,7 @@ def collect_data_1D(data_path, csv_file, device, train_test_split, train_val_spl
     train_dataset, test_dataset = torch.utils.data.random_split(dataset, [len(dataset) - int(len(dataset)*train_test_split), int(len(dataset)*train_test_split)])
     
     train_dataset, val_dataset = torch.utils.data.random_split(train_dataset, [len(train_dataset) - int(len(train_dataset)*train_val_split), int(len(train_dataset)*train_val_split)])
-    
+
     print(f'There are: {len(train_dataset)} training samples, {len(val_dataset)} validation samples and {len(test_dataset)} test samples')
 
     # create dataloaders
@@ -312,10 +348,11 @@ def train_model(test_name, train_bool,
 
             if epoch % 50 == 0:
 
-                save_plots_and_report(ret_dict, save_path, test_name, True)
+                save_plots_and_report(ret_dict, save_path, test_name, False)
     
 
     print('\n#----------------------#\n#     Test phase       #\n#----------------------#\n\n')
+    #model.load_state_dict(torch.load(save_path + 'best_valRelerr_model.pth', map_location=torch.device(device)))
 
     #model.load_state_dict(torch.load("results_04_12_ViT_feat_puzzle/2D_forecasting_lstm_CO(GT)_ricker_8_['CO(GT)', 'PT08.S1(CO)', 'C6H6(GT)', 'PT08.S2(NMHC)', 'NOx(GT)', 'PT08.S3(NOx)', 'NO2(GT)', 'PT08.S4(NO2)', 'PT08.S5(O3)', 'T', 'RH', 'AH']/best_valLoss_model.pth"))
     model.eval()
@@ -332,12 +369,15 @@ def train_model(test_name, train_bool,
     print('\n#----------------------#\n#   Process Completed  #\n#----------------------#\n\n')
 
 
-    save_plots_and_report(ret_dict, save_path, test_name,True)
+    save_plots_and_report(ret_dict, save_path, test_name, False)
+
+    return ret_dict["losses"]["loss_test"], ret_dict["rel_err"]["rel_err_test"]
 
 
 
 
-def main_1d(args):
+def main_1d(args, cross_validation_idx=-1):
+
     print(args)
 
     debug = args.do_debug
@@ -396,10 +436,30 @@ def main_1d(args):
 
     # Train model
 
-    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use)
+    return train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use)
 
 
-def main_2d(args):
+
+def main_cross_val(main_f, args):
+
+    ret_arr = []
+
+    for i in range(args.cross_val):
+
+        print("Cross validation iteration", i)
+
+        ret_arr += [main_f(args, i)]
+    
+        print("Cross validation iteration", i, "results", ret_arr, "\n\n\n")
+
+    mean_acc, mean_loss = np.mean(ret_arr, axis=0)
+    
+    print("Cross validation results", mean_acc, mean_loss)
+
+
+
+
+def main_2d(args, cross_validation_idx=-1):
     
     print(args)
 
@@ -436,6 +496,9 @@ def main_2d(args):
 
     test_name = f'{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_{args.bs}_{args.variables_to_use}'
 
+    if cross_validation_idx != -1:
+        test_name = f'_cross_val_{cross_validation_idx}di{args.cross_val}_' + test_name
+
     train_bool = not args.do_test
 
     print("train_bool",train_bool)
@@ -448,7 +511,7 @@ def main_2d(args):
 
     lr = 1e-5
 
-    epoch = 500
+    epoch = 3
 
     num_output_features = 24 if args.mode == "forecasting_lstm" else 1
 
@@ -468,15 +531,20 @@ def main_2d(args):
 
     batch_size = args.bs
 
-    train_data_loader, val_data_loader, test_data_loader = collect_data_2D(data_path=data_path, transform = transform, device = device, output_var= output_var, train_test_split=train_test_split, train_val_split=train_val_split, mode=args.mode, batch_size=batch_size, variables_to_use=args.variables_to_use)
+    train_data_loader, val_data_loader, test_data_loader = collect_data_2D(data_path=data_path, transform = transform, device = device, 
+                                                                           output_var= output_var, train_test_split=train_test_split,
+                                                                             train_val_split=train_val_split, mode=args.mode, batch_size=batch_size,
+                                                                               variables_to_use=args.variables_to_use,
+                                                                                cross_validation_idx=cross_validation_idx,
+                                                                                cross_val_split = args.cross_val)
 
     # Train model
 
-    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use, num_output_features=num_output_features)
+    return train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use, num_output_features=num_output_features)
 
 
 
-def main_2d_lstm(args):
+def main_2d_lstm(args, cross_validation_idx=-1):
     
     print(args)
 
@@ -545,7 +613,7 @@ def main_2d_lstm(args):
 
     # Train model
 
-    train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use, out_channel_idx=output_var_idx)
+    return train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use, out_channel_idx=output_var_idx)
 
 
 
@@ -573,14 +641,32 @@ def main():
 
     parser.add_argument('--bs', type=int, default=4, help='batch size')
 
+    parser.add_argument('--cross_val', type=int, default=1, help='cross validation iterations')
+                        
+
     args = parser.parse_args()
 
-    if args.dim == "1D":
-        main_1d(args)
-    elif args.dim == "2D" or '2D_ViT' in args.dim:
-        main_2d(args)
-    elif args.dim == "2D_LSTM":
-        main_2d_lstm(args)
+    if args.cross_val > 1:
+
+        if args.dim == "1D":
+            main_cross_val(main_1d, args)
+
+        elif args.dim == "2D" or '2D_ViT' in args.dim:
+            main_cross_val(main_2d, args)
+
+        elif args.dim == "2D_LSTM":
+            main_cross_val(main_2d_lstm, args)
+
+    else:
+
+        if args.dim == "1D":
+            main_1d(args)
+        elif args.dim == "2D" or '2D_ViT' in args.dim:
+            main_2d(args)
+        elif args.dim == "2D_LSTM":
+            main_2d_lstm(args)
+
+    
 
 
 if __name__ == '__main__':

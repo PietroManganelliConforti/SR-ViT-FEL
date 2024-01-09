@@ -73,7 +73,7 @@ def save_plot_loss_or_rel_err(info_dict, n_of_elements, path, test_name, smooth=
     plt.title(  str(list(info_dict.keys())[0]).split("_")[0] + " vs. No. of epochs" )
 
     if not os.path.exists(path):
-        print("PATH: ",path)
+        print("Creating path for saving plots: ", path)
         os.makedirs(path)
 
     if smooth: plt.savefig(path+test_name+"_smoothed.png")
