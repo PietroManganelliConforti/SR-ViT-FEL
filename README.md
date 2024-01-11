@@ -24,3 +24,7 @@
 
     - different mother wavelets (table 2): `./run_train_2D_wavelets.sh`
 
+
+## docker run with image
+
+`docker run -it --gpus all -v $(pwd):/app --ipc=host piemmec/stackedresnet2image`
