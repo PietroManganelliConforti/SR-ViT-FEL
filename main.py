@@ -31,16 +31,10 @@ class Normalize(object): # not used anymore
 
         return tensor
 
-def collect_data_2D(data_path , transform, device, output_var, train_test_split, train_val_split, mode, batch_size, variables_to_use, cross_validation_idx, cross_val_split): 
+def collect_data_2D(data_path , transform, device, output_var, train_test_split, train_val_split, mode, batch_size, variables_to_use, cross_validation_idx, cross_val_split, augmentation_flag): 
 
 
-
-    preprocess = None
-    #tr.Compose([
-    #                             Normalize(0,1)
-    #                         ])
-
-    #preprocess = CWTAugmentation()
+    preprocess = None if not augmentation_flag else CWTAugmentation()
     
     dataset = Dataset_2D(data_path=data_path, transform=transform, device=device, output_var=output_var, mode=mode, preprocess=preprocess, variable_to_use=variables_to_use)
     
@@ -94,15 +88,10 @@ def collect_data_2D(data_path , transform, device, output_var, train_test_split,
 
 
 
-def collect_data_2D_lstm(data_path , transform, device, output_var, train_test_split, train_val_split, mode, batch_size, variables_to_use, csv_file): 
+def collect_data_2D_lstm(data_path , transform, device, output_var, train_test_split, train_val_split, mode, batch_size, variables_to_use, csv_file, augmentation_flag):
 
-    preprocess = None
-    
-    #tr.Compose([
-    #                             Normalize(0,1)
-    #                        ])
 
-    #preprocess = CWTAugmentation()
+    preprocess = None if not augmentation_flag else CWTAugmentation()
     
     dataset = Dataset_2D(data_path=data_path, transform=transform, device=device, output_var=output_var, mode=mode, preprocess=preprocess, variable_to_use=variables_to_use)
     #print(list(dataset.windows[0].keys()))
@@ -169,7 +158,7 @@ def train_model(test_name, train_bool,
                  val_loader, test_loader,
                  res_path, device, dim, mode, transform, trained_net_path= "",
                  debug = False, variables_to_use=None, out_channel_idx=None,
-                 num_output_features=1):
+                 num_output_features=1,pretrained_flag = False, freezed_flag = False):
 
     
     print('TRAIN_MODEL\n\n')
@@ -217,14 +206,17 @@ def train_model(test_name, train_bool,
 
             model = LSTMForecaster(model, channels=num_input_channels, num_layers=2, hidden_size=512, outputs=1, mode='option1')
 
-        elif (dim == '2D_ViT_im' or dim == '2D_ViT_parallel_SR' or dim == '2D_ViT_feat' or dim == '2D_ViT_SR_feat_in_puzzle' or dim == '2D_ViT_SR_feat_in'):
-            model.load_state_dict(torch.load("StackedResnet_24output/best_valRelerr_model.pth"))
+        elif (dim == '2D_ViT_feat_puzzle' or dim == '2D_ViT_im' or dim == '2D_ViT_parallel_SR' or dim == '2D_ViT_feat' or dim == '2D_ViT_SR_feat_in_puzzle' or dim == '2D_ViT_SR_feat_in'):
+            
+            if(pretrained_flag): model.load_state_dict(torch.load("StackedResnet_24output/best_valRelerr_model.pth"))
+
+            if (freezed_flag):
+                # freeze stacked resnet
+                for param in model.parameters():
+                    param.requires_grad = False
+
             model = ViTForecaster(model, dim, outputs=24)
-        elif (dim == '2D_ViT_feat_puzzle'):
-            # freeze stacked resnet
-            for param in model.parameters():
-                param.requires_grad = False
-            model = ViTForecaster(model, dim, outputs=24)
+
 
     model = model.to(device)
 
@@ -328,7 +320,9 @@ def train_model(test_name, train_bool,
             
             print("[EPOCH "+str(epoch)+"]","Val_loss: ", val_loss, ",  Val_rel_err: ", val_rel_err)
 
-            if epoch > 49 and val_loss < best_val_loss:
+            save_after_n_epochs = 0 if debug else 15
+
+            if epoch > save_after_n_epochs and val_loss < best_val_loss:
 
                 torch.save(model.state_dict(), save_path + 'best_valLoss_model.pth')
                 torch.save(optimizer.state_dict(), save_path + 'state_dict_optimizer.op')
@@ -336,7 +330,7 @@ def train_model(test_name, train_bool,
                 best_val_loss = val_loss
                 print('Saving best val_loss model at epoch',epoch," with loss: ",val_loss)
 
-            if epoch > 49 and val_rel_err < best_val_rel_err:
+            if epoch > save_after_n_epochs and val_rel_err < best_val_rel_err:
 
                 torch.save(model.state_dict(), save_path + 'best_valRelerr_model.pth')
                 torch.save(optimizer.state_dict(), save_path + 'state_dict_optimizer.op')
@@ -350,9 +344,11 @@ def train_model(test_name, train_bool,
     
 
     print('\n#----------------------#\n#     Test phase       #\n#----------------------#\n\n')
-    #model.load_state_dict(torch.load(save_path + 'best_valRelerr_model.pth', map_location=torch.device(device)))
+    
+    model.load_state_dict(torch.load(save_path + 'best_valLoss_model.pth', map_location=torch.device(device)))
 
     #model.load_state_dict(torch.load("results_04_12_ViT_feat_puzzle/2D_forecasting_lstm_CO(GT)_ricker_8_['CO(GT)', 'PT08.S1(CO)', 'C6H6(GT)', 'PT08.S2(NMHC)', 'NOx(GT)', 'PT08.S3(NOx)', 'NO2(GT)', 'PT08.S4(NO2)', 'PT08.S5(O3)', 'T', 'RH', 'AH']/best_valLoss_model.pth"))
+
     model.eval()
     
     with torch.no_grad():
@@ -412,7 +408,10 @@ def main_1d(args, cross_validation_idx=-1):
 
     os.makedirs(res_path, exist_ok=True)
 
-    test_name = f'{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_{args.bs}'
+    test_name = f'{args.test_name}_{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_{args.bs}_{args.variables_to_use}'
+
+    if cross_validation_idx != -1:
+        test_name = f'_cross_val_{cross_validation_idx}di{args.cross_val}_' + test_name
 
     train_bool = not args.do_test
 
@@ -424,7 +423,7 @@ def main_1d(args, cross_validation_idx=-1):
 
     lr = 1e-5
 
-    epoch = 100
+    epoch = 2 if debug else 100
 
     debug = debug
 
@@ -434,7 +433,7 @@ def main_1d(args, cross_validation_idx=-1):
 
     # Train model
 
-    return train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use)
+    return train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use,pretrained_flag=args.pretrained,freezed_flag=args.freezed)
 
 
 
@@ -492,7 +491,7 @@ def main_2d(args, cross_validation_idx=-1):
 
     os.makedirs(res_path, exist_ok=True)
 
-    test_name = f'{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_{args.bs}_{args.variables_to_use}'
+    test_name = f'{args.test_name}_{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_{args.bs}_{args.variables_to_use}'
 
     if cross_validation_idx != -1:
         test_name = f'_cross_val_{cross_validation_idx}di{args.cross_val}_' + test_name
@@ -509,7 +508,7 @@ def main_2d(args, cross_validation_idx=-1):
 
     lr = 1e-5
 
-    epoch = 3
+    epoch = 2 if debug else 100
 
     num_output_features = 24 if args.mode == "forecasting_lstm" else 1
 
@@ -531,14 +530,14 @@ def main_2d(args, cross_validation_idx=-1):
 
     train_data_loader, val_data_loader, test_data_loader = collect_data_2D(data_path=data_path, transform = transform, device = device, 
                                                                            output_var= output_var, train_test_split=train_test_split,
-                                                                             train_val_split=train_val_split, mode=args.mode, batch_size=batch_size,
-                                                                               variables_to_use=args.variables_to_use,
-                                                                                cross_validation_idx=cross_validation_idx,
-                                                                                cross_val_split = args.cross_val)
+                                                                            train_val_split=train_val_split, mode=args.mode, batch_size=batch_size,
+                                                                            variables_to_use=args.variables_to_use,
+                                                                            cross_validation_idx=cross_validation_idx,
+                                                                            cross_val_split = args.cross_val, augmentation_flag = args.augmentation)
 
     # Train model
 
-    return train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use, num_output_features=num_output_features)
+    return train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use, num_output_features=num_output_features,pretrained_flag=args.pretrained,freezed_flag=args.freezed)
 
 
 
@@ -577,7 +576,10 @@ def main_2d_lstm(args, cross_validation_idx=-1):
 
     os.makedirs(res_path, exist_ok=True)
 
-    test_name = f'{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_{args.bs}_{args.variables_to_use}'
+    test_name = f'{args.test_name}_{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_{args.bs}_{args.variables_to_use}'
+
+    if cross_validation_idx != -1:
+        test_name = f'_cross_val_{cross_validation_idx}di{args.cross_val}_' + test_name
 
     train_bool = not args.do_test
 
@@ -591,7 +593,7 @@ def main_2d_lstm(args, cross_validation_idx=-1):
 
     lr = 1e-5
 
-    epoch = 100
+    epoch = 2 if debug else 100
 
     debug = debug
 
@@ -607,11 +609,14 @@ def main_2d_lstm(args, cross_validation_idx=-1):
 
     batch_size = args.bs
 
-    train_data_loader, val_data_loader, test_data_loader, output_var_idx = collect_data_2D_lstm(data_path=data_path, transform = transform, device = device, output_var= output_var, train_test_split=train_test_split, train_val_split=train_val_split, mode=args.mode, batch_size=batch_size, variables_to_use=args.variables_to_use, csv_file="AirQuality.csv")
+    train_data_loader, val_data_loader, test_data_loader, output_var_idx = collect_data_2D_lstm(data_path=data_path, transform = transform, device = device, output_var= output_var,
+                                                                                                 train_test_split=train_test_split, train_val_split=train_val_split, mode=args.mode,
+                                                                                                   batch_size=batch_size, variables_to_use=args.variables_to_use, csv_file="AirQuality.csv"
+                                                                                                   ,augmentation_flag = args.augmentation)
 
     # Train model
 
-    return train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use, out_channel_idx=output_var_idx)
+    return train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use, out_channel_idx=output_var_idx,pretrained_flag=args.pretrained,freezed_flag=args.freezed)
 
 
 
@@ -640,6 +645,14 @@ def main():
     parser.add_argument('--bs', type=int, default=4, help='batch size')
 
     parser.add_argument('--cross_val', type=int, default=1, help='cross validation iterations')
+
+    parser.add_argument('--test_name', type=str, default="")
+
+    parser.add_argument('--pretrained', action='store_true')
+
+    parser.add_argument('--freezed', action='store_true')
+
+    parser.add_argument('--augmentation', action='store_true')
                         
 
     args = parser.parse_args()

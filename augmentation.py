@@ -59,7 +59,7 @@ class CWTAugmentation:
         cwt_image = self.add_noise(cwt_image,self.noise_std )
         
         # Elastic transformations
-        cwt_image = self.elastic_transform(cwt_image)
+        #cwt_image = self.elastic_transform(cwt_image)
         
         return cwt_image
 
