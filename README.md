@@ -27,4 +27,4 @@
 
 ## docker run with image
 
-`docker run -it --gpus all -v $(pwd):/app --ipc=host piemmec/stackedresnet2image`
+`docker run -it --gpus all -v $(pwd):/app --ipc=host --user 1002:1002 piemmec/stackedresnet2image`
