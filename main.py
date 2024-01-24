@@ -515,7 +515,7 @@ def main_cross_val(main_f, args):
 
     with open("return_of_everything.csv", 'a') as f:
         writer = csv.writer(f)
-        writer.writerow([mean_acc, mean_loss, args, paths, ret_arr])
+        writer.writerow([mean_acc, mean_loss, args.dim, args.augmentation, args.pretrained, args.freezed, ret_arr, paths[-1] ])
         f.close()
 
 
@@ -528,10 +528,9 @@ def main_2d(args, cross_validation_idx=-1):
 
     debug = args.do_debug
 
-    device = args.gpu
+    device = "cuda:"+args.gpu+"" (if torch.cuda.is_available() else "cpu")
 
-    device = hardware_check()
-
+    print("Actual device: ", device)
 
     os.environ["CUDA_VISIBLE_DEVICES"] = device
  
