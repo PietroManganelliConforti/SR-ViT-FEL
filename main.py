@@ -205,6 +205,7 @@ def train_model(test_name, train_bool,
 
     if not os.path.exists(save_path):
         os.makedirs(save_path)
+        print("Creating directory for saving models: ", save_path)
 
 
     # Setup-train
@@ -449,6 +450,10 @@ def main_1d(args, cross_validation_idx=-1):
     if cross_validation_idx != -1:
         test_name = f'_cross_val_{cross_validation_idx+1}di{args.cross_val}_' + test_name
 
+    test_name = test_name + ("_augmented" if args.augmentation else "")
+    test_name = test_name + ("_freezed" if args.freezed else "")
+    test_name = test_name + ("_pretrained" if args.pretrained else "" )
+
     train_bool = not args.do_test
 
     print("train_bool",train_bool)
@@ -494,16 +499,24 @@ def main_cross_val(main_f, args):
     mean_acc, mean_loss = np.mean(ret_arr, axis=0)
     
     json_dict = {
-        "mean_acc" : mean_acc,
-        "mean_loss" : mean_loss,
+        "mean_acc" : str(mean_acc),
+        "mean_loss" : str(mean_loss),
         "args" : str(args),
-        "paths" : paths,
-        "ret_arr" : ret_arr
+        "paths" :str( paths),
+        "ret_arr" : str(ret_arr)
     }
 
     with open(os.path.join(paths[-1], "cross_val_results.json"), 'w') as f:
         f.write(json.dumps(json_dict, indent=4))
 
+    import csv
+
+    #open return_of_everything and write the results mean_acc, mean_loss, args, paths, ret_arr
+
+    with open("return_of_everything.csv", 'a') as f:
+        writer = csv.writer(f)
+        writer.writerow([mean_acc, mean_loss, args, paths, ret_arr])
+        f.close()
 
 
 
@@ -544,10 +557,16 @@ def main_2d(args, cross_validation_idx=-1):
 
     os.makedirs(res_path, exist_ok=True)
 
+
     test_name = f'{args.test_name}_{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_{args.bs}_{args.variables_to_use}'
 
     if cross_validation_idx != -1:
-        test_name = f'_cross_val_{cross_validation_idx}di{args.cross_val}_' + test_name
+        test_name = f'_cross_val_{cross_validation_idx+1}di{args.cross_val}_' + test_name
+    
+
+    test_name = test_name + ("_augmented" if args.augmentation else "")
+    test_name = test_name + ("_freezed" if args.freezed else "")
+    test_name = test_name + ("_pretrained" if args.pretrained else "" )
 
     train_bool = not args.do_test
 
@@ -589,6 +608,8 @@ def main_2d(args, cross_validation_idx=-1):
                                                                             cross_val_split = args.cross_val, augmentation_flag = args.augmentation)
 
     # Train model
+
+
 
     return train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use, num_output_features=num_output_features,pretrained_flag=args.pretrained,freezed_flag=args.freezed)
 
@@ -632,7 +653,12 @@ def main_2d_lstm(args, cross_validation_idx=-1):
     test_name = f'{args.test_name}_{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_{args.bs}_{args.variables_to_use}'
 
     if cross_validation_idx != -1:
-        test_name = f'_cross_val_{cross_validation_idx}di{args.cross_val}_' + test_name
+        test_name = f'_cross_val_{cross_validation_idx+1}di{args.cross_val}_' + test_name
+    
+
+    test_name = test_name + ("_augmented" if args.augmentation else "")
+    test_name = test_name + ("_freezed" if args.freezed else "")
+    test_name = test_name + ("_pretrained" if args.pretrained else "" )
 
     train_bool = not args.do_test
 

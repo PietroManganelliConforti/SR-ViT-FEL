@@ -93,6 +93,8 @@ def save_plots_and_report(ret_dict, save_path, test_name, smooth= False):
     ret_str +="\n\nrel_err_eval: " + str(ret_dict["rel_err"]["rel_err_eval"][-1:]) 
     ret_str +="\n\nrel_err_test: " + str(ret_dict["rel_err"]["rel_err_test"][-1:]) 
 
+    #print("\n\n","saving report in:",save_path+test_name +'.txt')
+
     with open(save_path+test_name +'.txt', 'w+') as f:
         f.write(test_name + "\n\n"+ ret_str + '\n\nret dict:\n' + str(ret_dict))
 
