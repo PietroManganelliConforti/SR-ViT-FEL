@@ -243,7 +243,7 @@ def train_model(test_name, train_bool,
 
             model = LSTMForecaster(model, channels=num_input_channels, num_layers=2, hidden_size=512, outputs=1, mode='option1')
 
-        elif (or dim == '2D_ViT_im' or dim == '2D_ViT_parallel_SR' or dim == '2D_ViT_SR_feat_in'):
+        elif (dim == '2D_ViT_im' or dim == '2D_ViT_parallel_SR' or dim == '2D_ViT_SR_feat_in'):
             
             if(pretrained_flag): model.load_state_dict(torch.load("StackedResnet_24output/best_valRelerr_model.pth"))
 
