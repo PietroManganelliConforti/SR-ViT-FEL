@@ -150,7 +150,7 @@ ViTForImageClassification(
 
 class AdaptaBlock(nn.Module):
     def __init__(self, UPCONV=False):
-        super(Block, self).__init__()
+        super(AdaptaBlock, self).__init__()
 
         
         # 512 -> 3
