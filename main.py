@@ -528,7 +528,22 @@ def main_2d(args, cross_validation_idx=-1):
 
     debug = args.do_debug
 
-    device = "cuda:"+args.gpu+"" (if torch.cuda.is_available() else "cpu")
+    device = None
+
+    if torch.cuda.is_available():
+
+        device = ("cuda:"+args.gpu)
+
+        num_devices = torch.cuda.device_count()
+
+        current_device = torch.cuda.current_device()
+
+        device_name = torch.cuda.get_device_name(current_device) 
+
+        print("Device name:", device_name, "Device number:", current_device, "Number of devices:", num_devices)
+    
+    else:
+        device = "cpu"
 
     print("Actual device: ", device)
 
