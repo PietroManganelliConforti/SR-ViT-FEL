@@ -204,7 +204,7 @@ def train_model(test_name, train_bool,
     save_path = res_path + '/' + test_name + '/'
 
     if not os.path.exists(save_path):
-        os.makedirs(save_path)
+        os.makedirs(save_path, mode=0o777)
         print("Creating directory for saving models: ", save_path)
 
 
@@ -569,7 +569,7 @@ def main_2d(args, cross_validation_idx=-1):
 
     res_path = "results_"+system_time_string
 
-    os.makedirs(res_path, exist_ok=True)
+    os.makedirs(res_path, exist_ok=True, mode=0o777)
 
 
     test_name = f'{args.dim}_{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_{args.bs}_{args.variables_to_use}'
@@ -662,7 +662,7 @@ def main_2d_lstm(args, cross_validation_idx=-1):
 
     res_path = "results_"+system_time_string
 
-    os.makedirs(res_path, exist_ok=True)
+    os.makedirs(res_path, exist_ok=True, mode=0o777)
 
     test_name = f'{args.test_name}_{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_{args.bs}_{args.variables_to_use}'
 
