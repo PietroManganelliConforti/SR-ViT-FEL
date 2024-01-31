@@ -572,7 +572,7 @@ def main_2d(args, cross_validation_idx=-1):
     os.makedirs(res_path, exist_ok=True)
 
 
-    test_name = f'{args.test_name}_{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_{args.bs}_{args.variables_to_use}'
+    test_name = f'{args.dim}_{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_{args.bs}_{args.variables_to_use}'
 
     if cross_validation_idx != -1:
         test_name = f'_cross_val_{cross_validation_idx+1}di{args.cross_val}_' + test_name
