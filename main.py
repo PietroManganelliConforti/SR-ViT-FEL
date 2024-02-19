@@ -32,10 +32,12 @@ class Normalize(object): # not used anymore
 
         return tensor
 
-def collect_data_2D(data_path , transform, device, output_var, train_test_split, train_val_split, mode, batch_size, variables_to_use, cross_validation_idx, cross_val_split, augmentation_flag): 
+def collect_data_2D(data_path , transform, device, output_var, train_test_split, 
+                    train_val_split, mode, batch_size, variables_to_use, cross_validation_idx, 
+                    cross_val_split, augmentation_flag, aug_type): 
 
 
-    preprocess = None if not augmentation_flag else CWTAugmentation()
+    preprocess = None if not augmentation_flag else CWTAugmentation(aug_type)
     
     dataset = Dataset_2D(data_path=data_path, transform=transform, device=device, output_var=output_var, mode=mode, preprocess=preprocess, variable_to_use=variables_to_use)
     
@@ -581,6 +583,7 @@ def main_2d(args, cross_validation_idx=-1):
     test_name = test_name + ("_augmented" if args.augmentation else "")
     test_name = test_name + ("_freezed" if args.freezed else "")
     test_name = test_name + ("_pretrained" if args.pretrained else "" )
+    test_name = test_name + ("_aug_type_"+args.aug_type if args.aug_type else "")
 
     train_bool = not args.do_test
 
@@ -619,7 +622,8 @@ def main_2d(args, cross_validation_idx=-1):
                                                                             train_val_split=train_val_split, mode=args.mode, batch_size=batch_size,
                                                                             variables_to_use=args.variables_to_use,
                                                                             cross_validation_idx=cross_validation_idx,
-                                                                            cross_val_split = args.cross_val, augmentation_flag = args.augmentation)
+                                                                            cross_val_split = args.cross_val, augmentation_flag = args.augmentation,
+                                                                            aug_type=args.aug_type)
 
     # Train model
 
@@ -749,6 +753,8 @@ def main():
     parser.add_argument('--freezed', action='store_true')
 
     parser.add_argument('--augmentation', action='store_true')
+
+    parser.add_argument('--aug_type', type=str, default="")
                         
 
     args = parser.parse_args()

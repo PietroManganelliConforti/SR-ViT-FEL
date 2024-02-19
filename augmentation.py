@@ -11,7 +11,8 @@ import torchvision.utils as vutils
 
 class CWTAugmentation:
 
-    def __init__(self, rotation_range=5, scale_range=(0.9, 1.1), translation_range=(0.1, 0.1),
+    def __init__(self, aug_type='all',
+                 rotation_range=5, scale_range=(0.9, 1.1), translation_range=(0.1, 0.1),
                  zoom_range=(0.9, 1.1), brightness_range=(0.8, 1.2), contrast_range=(0.8, 1.2),
                  noise_std=0.05, elastic_alpha=1, elastic_sigma=0.1):
         self.rotation_range = rotation_range
@@ -23,6 +24,8 @@ class CWTAugmentation:
         self.noise_std = noise_std
         self.elastic_alpha = elastic_alpha
         self.elastic_sigma = elastic_sigma
+        self.aug_type = aug_type
+
 
     def app(self, cwt_image):
         for i in range(cwt_image.size(0)):
@@ -32,32 +35,47 @@ class CWTAugmentation:
 
     def __call__(self, cwt_image):
 
-        # Random rotation 
-        angle = np.random.uniform(-self.rotation_range, self.rotation_range)
-        cwt_image = self.rotate(cwt_image, angle)
+        if self.aug_type == 'rotate':
+
+            # Random rotation 
+            angle = np.random.uniform(-self.rotation_range, self.rotation_range)
+            cwt_image = self.rotate(cwt_image, angle)
         
-        # Random scaling
-        scale_factor = np.random.uniform(*self.scale_range)
-        cwt_image = self.scale(cwt_image, scale_factor)
+        elif self.aug_type == 'scale':
+            # Random scaling
+            scale_factor = np.random.uniform(*self.scale_range)
+            cwt_image = self.scale(cwt_image, scale_factor)
+            
+        elif self.aug_type == 'translate':
+            # Random translation
+            translation = (np.random.uniform(-self.translation_range[0], self.translation_range[0]),
+                        np.random.uniform(-self.translation_range[1], self.translation_range[1]))
+            cwt_image = self.translate(cwt_image, translation)
         
-        # Random translation
-        translation = (np.random.uniform(-self.translation_range[0], self.translation_range[0]),
-                       np.random.uniform(-self.translation_range[1], self.translation_range[1]))
-        cwt_image = self.translate(cwt_image, translation)
+        elif self.aug_type == 'zoom':
+            # Random zoom
+            zoom_factor = np.random.uniform(*self.zoom_range)
+            cwt_image = self.zoom(cwt_image, zoom_factor)
         
-        # Random zoom
-        zoom_factor = np.random.uniform(*self.zoom_range)
-        cwt_image = self.zoom(cwt_image, zoom_factor)
+        elif self.aug_type == 'brightness_contrast':
+            # # Random brightness and contrast adjustment
+            brightness_factor = np.random.uniform(*self.brightness_range)
+            contrast_factor = np.random.uniform(*self.contrast_range)
+            for i in range(cwt_image.size(0)):   
+                cwt_image[i] = self.adjust_brightness_contrast(cwt_image[i].unsqueeze(0), brightness_factor, contrast_factor).squeeze(0)
         
-        # # Random brightness and contrast adjustment
-        brightness_factor = np.random.uniform(*self.brightness_range)
-        contrast_factor = np.random.uniform(*self.contrast_range)
-        for i in range(cwt_image.size(0)):   
-            cwt_image[i] = self.adjust_brightness_contrast(cwt_image[i].unsqueeze(0), brightness_factor, contrast_factor).squeeze(0)
-        
-        # Add Gaussian noise
-        cwt_image = self.add_noise(cwt_image,self.noise_std )
-        
+        elif self.aug_type == 'noise1':
+            # Add Gaussian noise
+            cwt_image = self.add_noise(cwt_image,0.05)
+
+        elif self.aug_type == 'noise2':
+            # Add Gaussian noise
+            cwt_image = self.add_noise(cwt_image,0.01)
+
+        elif self.aug_type == 'noise3':
+            # Add Gaussian noise
+            cwt_image = self.add_noise(cwt_image,0.001)
+
         # Elastic transformations
         #cwt_image = self.elastic_transform(cwt_image)
         
