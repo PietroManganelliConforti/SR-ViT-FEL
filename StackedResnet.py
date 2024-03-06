@@ -297,14 +297,15 @@ class ViTForecaster (nn.Module):
         self.ViT = transformers.ViTForImageClassification.from_pretrained(model_name, config=config, ignore_mismatched_sizes=True)        
         #model.vit.embeddings.patch_embeddings.projection = torch.nn.Conv2d(512, 768, kernel_size=(8, 1), stride=(8, 1), padding=(0,0), groups=256)
         self.ViT.classifier = torch.nn.Sequential(torch.nn.Linear(768,512,bias=True),torch.nn.Dropout(p=0.5), torch.nn.ReLU())
-        self.classifier = torch.nn.Sequential(torch.nn.Linear(512*2,24,bias=True))
+        
 
     
         self.relu = nn.ReLU()
         if (self.dim == '2D_ViT_im'):
             self.conv1x1 = torch.nn.Conv2d(12, 3, kernel_size=1)
             self.bn1 = nn.BatchNorm2d(3)
-        
+
+            self.classifier_dim = 512
 
             
         elif (self.dim == '2D_ViT_parallel_SR'):
@@ -313,14 +314,18 @@ class ViTForecaster (nn.Module):
             
             self.conv1x1 = torch.nn.Conv2d(12, 3, kernel_size=1)
             self.bn1 = nn.BatchNorm2d(3)            
+            
+            self.classifier_dim = 1024
     
         
         elif (self.dim == '2D_ViT_SR_feat_in'):
             self.stacked_resnet = stacked_resnet
             self.stacked_resnet.resnet.fc = nn.Identity()
             self.adapta_block = AdaptaBlock()
-            
-              
+            self.classifier_dim = 1024
+        
+        self.classifier = torch.nn.Sequential(torch.nn.Linear(self.classifier_dim, 24, bias=True))
+
             
 
     # x_img: (N, H, W, C)
@@ -332,7 +337,7 @@ class ViTForecaster (nn.Module):
             x = self.bn1(x)
             # From (8, 12, 396, 496) to (8, 3, 224, 224) 
             x = F.interpolate(x, size=(224, 224), mode='bilinear', align_corners=False)
-            outputs = self.ViT(x, interpolate_pos_encoding=True).logits
+            x = self.ViT(x, interpolate_pos_encoding=True).logits
            
         elif (self.dim == '2D_ViT_parallel_SR'):
             x_sr = self.stacked_resnet(x_img)
@@ -342,9 +347,8 @@ class ViTForecaster (nn.Module):
             x_img = self.bn1(x_img)
             x_vit = self.ViT(x_img).logits
             
-            
             x = torch.cat((x_sr, x_vit), 1)
-            outputs = self.classifier(x)
+            
 
             
         elif (self.dim == '2D_ViT_SR_feat_in'):
@@ -359,7 +363,7 @@ class ViTForecaster (nn.Module):
             x_vit = self.ViT(x_feat_merged).logits
               
             x = torch.cat((x_sr, x_vit), 1)
-            outputs = self.classifier(x)            
         
+        outputs = self.classifier(x)
         return outputs
 
