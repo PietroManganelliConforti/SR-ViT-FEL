@@ -18,6 +18,8 @@ import time
 from datasets import *
 from augmentation import CWTAugmentation
 import json
+import random
+import torch
 
 class Normalize(object): # not used anymore
     def __init__(self, mean=[0 for i in range(12)], std=[1 for i in range(12)]):
@@ -443,8 +445,8 @@ def main_1d(args, cross_validation_idx=-1):
     
     torch.backends.cudnn.deterministic=True
     
-    torch.set_deterministic(True)
-
+    torch.use_deterministic_algorithms(True)
+    
     ####### ARGS
     
     system_time = time.localtime()
@@ -585,8 +587,8 @@ def main_2d(args, cross_validation_idx=-1):
     
     torch.backends.cudnn.deterministic=True
     
-    torch.set_deterministic(True)
-
+    torch.use_deterministic_algorithms(True)
+    
     ####### ARGS
 
     system_time = time.localtime()
@@ -692,8 +694,8 @@ def main_2d_lstm(args, cross_validation_idx=-1):
     
     torch.backends.cudnn.deterministic=True
     
-    torch.set_deterministic(True)
-    
+    torch.use_deterministic_algorithms(True)
+        
     ####### ARGS
 
     system_time = time.localtime()
