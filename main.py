@@ -445,7 +445,7 @@ def main_1d(args, cross_validation_idx=-1):
     
     torch.backends.cudnn.deterministic=True
     
-    torch.use_deterministic_algorithms(True)
+    torch.use_deterministic_algorithms(True, warn_only=True)
     
     ####### ARGS
     
@@ -587,7 +587,7 @@ def main_2d(args, cross_validation_idx=-1):
     
     torch.backends.cudnn.deterministic=True
     
-    torch.use_deterministic_algorithms(True)
+    torch.use_deterministic_algorithms(True, warn_only=True)
     
     ####### ARGS
 
@@ -694,7 +694,7 @@ def main_2d_lstm(args, cross_validation_idx=-1):
     
     torch.backends.cudnn.deterministic=True
     
-    torch.use_deterministic_algorithms(True)
+    torch.use_deterministic_algorithms(True, warn_only=True)
         
     ####### ARGS
 
