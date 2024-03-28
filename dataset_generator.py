@@ -32,9 +32,11 @@ def process_intervals_from_dataset(dataset, wavelets, scales, k, window_size, st
         # f_fore_lstm = open(folder_name + "/" + k + "/fore_lstm.txt", "w")
         f_fore_lstm = []
 
+        intervals = []
         for i, sample in enumerate(dataset):
 
             interval = sample["input"][k]
+            intervals += [interval]
 
             if sample["fore_simple"] is not None:
                 f_fore_simple.write(str(sample["fore_simple"][k])+"\n")
@@ -54,6 +56,8 @@ def process_intervals_from_dataset(dataset, wavelets, scales, k, window_size, st
         # f_fore_lstm.close()
 
         np.save(folder_name + "/" + k + "/fore_lstm.npy", np.array(f_fore_lstm))
+
+        np.save(folder_name + "/" + k + "/signal_window.npy", np.array(intervals))
 
         if only_labels_flag: continue
 

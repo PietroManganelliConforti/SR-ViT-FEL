@@ -272,12 +272,15 @@ class Dataset_1D_raw(torch.utils.data.Dataset):
 # We need to return a stack of variables that will fed as input into the CNN + output
 # TO DO: insert the output, modify input variable names and insert new arguments in dataset2_D
 class Dataset_2D(torch.utils.data.Dataset):
-    def __init__(self, data_path, transform, device, output_var, mode="regression", preprocess=None, variable_to_use = []):
+    def __init__(self, data_path, transform, device, output_var, mode="regression", preprocess=None, variable_to_use = [], include_signals=False):
+        
+        variable_to_use = list(sorted(variable_to_use))
         
         assert mode in {"forecasting_simple", "forecasting_advanced", "regression", "forecasting_lstm"}
 
         windows = {}
         old_variable_dir = None
+        self.loaded_files = []
         for root, _, files in os.walk(data_path):
             
             transform_dir = root.split("/")[-1]
@@ -290,7 +293,8 @@ class Dataset_2D(torch.utils.data.Dataset):
             
             for file in natsorted(files):
                 file_to_load = os.path.join(root, file)
-                
+                #print(f'file_to_load: {file_to_load}')
+
                 #print(f'transform_dir: {transform_dir}')
 
                 if (transform_dir == transform):
@@ -300,6 +304,7 @@ class Dataset_2D(torch.utils.data.Dataset):
                     if (old_variable_dir != variable_dir): idx = 0
                     if (idx not in windows): windows[idx] = {}
                     
+                    self.loaded_files.append(file_to_load)
 
                     img = cv2.imread(file_to_load)
                     img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) 
@@ -331,6 +336,7 @@ class Dataset_2D(torch.utils.data.Dataset):
                 windows = windows[self.starting_idx:-1]
         """
 
+        self.include_signals = include_signals
         self.windows = windows
         self.num_samples = len(windows)
         self.device = device
@@ -355,6 +361,12 @@ class Dataset_2D(torch.utils.data.Dataset):
         else:
             label_file = os.path.join(self.data_path, self.output_var,"fore_lstm.npy")
             self.labels = torch.tensor(np.load(label_file),dtype=torch.float32)
+            signals = []
+            for variable in variable_to_use:
+                signal_file = os.path.join(self.data_path, variable, "signal_window.npy")
+                signals += [np.load(signal_file)]
+            # (N_WINDOWS, N_CHANNELS, WINDOW_SIZE)
+            self.signals = torch.tensor(np.array(signals), dtype=torch.float32).permute(1,0,2)
 
 
 
@@ -371,6 +383,7 @@ class Dataset_2D(torch.utils.data.Dataset):
 
         windows = []
         for key in self.windows[idx].keys():
+            # print(f'[2D] key: {key}')
             windows.append(self.windows[idx][key])
 
         input = torch.tensor(np.array(windows)) #.to(self.device)
@@ -378,6 +391,9 @@ class Dataset_2D(torch.utils.data.Dataset):
 
         if self.preprocess is not None:
             input = self.preprocess(input)
+
+        if self.include_signals:
+            input = (self.signals[idx], input)
 
         return input, output
     

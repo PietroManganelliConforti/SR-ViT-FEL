@@ -46,15 +46,16 @@ class StackedResNet(nn.Module):
 # 3. fully connected che porta le feature da (N,) a (T,)
 # 4. baseline con StackedResNet con 24 output
 
-class LSTMForecaster(nn.Module):
+class LSTMSRForecaster(nn.Module):
 
     def __init__(
         self,
         stacked_resnet,
-        channels=11,
-        num_layers=2,
-        hidden_size=512,
-        outputs=1,
+        outputs,
+        channels,
+        num_layers,
+        hidden_size,
+        bidirectional,
         mode='option1'
     ) -> None:
         super().__init__()
@@ -64,30 +65,34 @@ class LSTMForecaster(nn.Module):
         self.stacked_resnet = stacked_resnet
 
         input_size = channels + stacked_resnet.num_output_features
-        print(f'channels: {channels}, stacked_resnet.num_output_features: {stacked_resnet.num_output_features}, input_size: {input_size}')
+        print(f'channels: {channels}, stacked_resnet.num_output_features: {stacked_resnet.num_output_features}, input_size: {input_size}, outputs: {outputs}')
         self.lstm = nn.LSTM(
             input_size=input_size,
             hidden_size=hidden_size,
             num_layers=num_layers,
-            batch_first=True
+            batch_first=True,
+            bidirectional=bidirectional
         )
 
         self.relu = nn.ReLU()
-        self.fc1 = nn.Linear(hidden_size, hidden_size // 2)
+        self.fc1 = nn.Linear((2 if bidirectional else 1)*hidden_size, hidden_size // 2)
         self.fc2 = nn.Linear(hidden_size // 2, outputs)
 
-    # x_img: (N, H, W, C)
+    # x_img: (N, C, H, W)
     # x_signal: (N, L, C)
     # -> (N, Y)
     def forward(self, x_img, x_signal):
-
-        L = x_signal.shape[2]
+        # print(f'Shapes: x_img: {x_img.shape}, x_sig: {x_signal.shape}')
+        L = x_signal.shape[1]
         # (N, F)
         features = self.stacked_resnet(x_img)
+        # print(f'Shapes: features: {features.shape}')
+        # (N, L, F)
+        features_lstm = features.unsqueeze(1).expand(-1, L, -1)
         # (N, L, C+F)
-        print('AO' + str(features.unsqueeze(1).expand(-1, L, -1).shape) + str(x_signal.shape))
+        # print(f'Shapes: features_lstm: {features_lstm.shape}, x_sig: {x_signal.shape}')
         x_lstm = torch.cat(
-            (features.unsqueeze(1).expand(-1, L, -1), x_signal),
+            (features_lstm, x_signal),
             dim=2
         )
         # (N, L, H)

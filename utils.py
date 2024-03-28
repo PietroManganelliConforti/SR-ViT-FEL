@@ -20,10 +20,26 @@ def evaluate_model(model, loader,device, dim, mode):
     rel_err = 0
 
     for images, labels in loader:
-        images = images.to(device)
+        if dim == '2D_LSTM_SR':
+            images = (images[0].to(device), images[1].to(device))
+        else:
+            images = images.to(device)
         labels = labels.to(device)
-        out = model(images)
-        if not ( (dim=='2D' or '2D_ViT' in dim) and mode=='forecasting_lstm'):
+
+        if dim == '2D_LSTM_SR':
+            # signals: (N, 1, C, L)
+            # images: (N, C, H, W)
+            signals, images = images
+            # print(f'shape of signals: {signals.shape}, shape of images: {images.shape}')
+            # signals: (N, L, C)
+            signals = signals.permute(0, 2, 1)
+            # out: (N, 24)
+            out = model(images, signals)
+        else:
+            out = model(images)
+
+        # NOTE see same if in main.py
+        if mode != 'forecasting_lstm':
             out = torch.flatten(out)
         loss += torch.nn.functional.mse_loss(out, labels)
         rel_err += ((out - labels) / labels).abs().mean()

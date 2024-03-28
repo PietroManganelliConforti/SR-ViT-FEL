@@ -11,7 +11,7 @@ import argparse
 import pandas as pd
 from natsort import natsorted
 import cv2
-from StackedResnet import StackedResNet, LSTMForecaster, ViTForecaster
+from StackedResnet import StackedResNet, LSTMSRForecaster, ViTForecaster
 from BaselineArchitectures import Stacked2DLinear, Stacked1DLinear, LSTMLinear
 from torchsummary import summary
 import time
@@ -93,46 +93,31 @@ def collect_data_2D(data_path , transform, device, output_var, train_test_split,
 
 
 
-def collect_data_2D_lstm(data_path , transform, device, output_var, train_test_split, train_val_split, mode, batch_size, variables_to_use, cross_validation_idx, cross_val_split, csv_file, augmentation_flag):
+def collect_data_2D_lstm(data_path , transform, device, output_var, train_test_split, 
+                    train_val_split, mode, batch_size, variables_to_use, cross_validation_idx, 
+                    cross_val_split, augmentation_flag, aug_type, include_signals): 
 
 
-    preprocess = None if not augmentation_flag else CWTAugmentation()
+    preprocess = None if not augmentation_flag else CWTAugmentation(aug_type)
     
-    dataset = Dataset_2D(data_path=data_path, transform=transform, device=device, output_var=output_var, mode=mode, preprocess=preprocess, variable_to_use=variables_to_use)
-    #print(list(dataset.windows[0].keys()))
-    output_var_idx = list(dataset.windows[0].keys()).index(output_var)
-
+    dataset = Dataset_2D(
+        data_path=data_path,
+        transform=transform,
+        device=device,
+        output_var=output_var,
+        mode=mode,
+        preprocess=preprocess, # TODO review
+        variable_to_use=variables_to_use,
+        include_signals=include_signals
+    )
+    
     len_dataset = len(dataset)
 
-
-    print(f'\nNumero di Training samples: {len(dataset)}')
-
-
-    train_dataset_2D, test_dataset_2D = torch.utils.data.random_split(dataset, [len(dataset) - int(len(dataset)*train_test_split), int(len(dataset)*train_test_split)])
-    
-    train_dataset_2D, val_dataset_2D = torch.utils.data.random_split(train_dataset_2D, [len(train_dataset_2D) - int(len(train_dataset_2D)*train_val_split), int(len(train_dataset_2D)*train_val_split)])
-
-    print(f'Ther are: {len(train_dataset_2D)} training samples, {len(val_dataset_2D)} validation samples and {len(test_dataset_2D)} test samples')
-
-    dataset_1D = Dataset_1D_raw(data_path, csv_file=csv_file, device=device, output_var=output_var, mode=mode, variables_to_use=variables_to_use)
-                                                                
-    print(f'\nNumero di Training samples: {len(dataset)}')
-
-    train_dataset_1D, test_dataset_1D = torch.utils.data.random_split(dataset_1D, [len(dataset_1D) - int(len(dataset_1D)*train_test_split), int(len(dataset_1D)*train_test_split)])
-    
-    train_dataset_1D, val_dataset_1D = torch.utils.data.random_split(train_dataset_1D, [len(train_dataset_1D) - int(len(train_dataset_1D)*train_val_split), int(len(train_dataset_1D)*train_val_split)])
-    
-    print(f'There are: {len(train_dataset_1D)} training samples, {len(val_dataset_1D)} validation samples and {len(test_dataset_1D)} test samples')
-
-    train_dataset = ZipDatasets(train_dataset_1D, train_dataset_2D)
-    val_dataset = ZipDatasets(val_dataset_1D, val_dataset_2D)
-    test_dataset = ZipDatasets(test_dataset_1D, test_dataset_2D)
+    print(f'\nNumero di Training samples: {len_dataset}')
 
     if cross_validation_idx != -1:
 
-        dataset_zipped = ZipDatasets(dataset_1D,dataset)
-
-        indices = np.arange(len_dataset) #Da mettere sullo zipdataset?
+        indices = np.arange(len_dataset)
         
         
         fold_size = len_dataset // cross_val_split
@@ -147,8 +132,9 @@ def collect_data_2D_lstm(data_path , transform, device, output_var, train_test_s
 
         train_indices = np.concatenate([indices[:start], indices[end:]])
         
-        fold_train_dataset = torch.utils.data.Subset(dataset_zipped, train_indices)
-        fold_val_dataset = torch.utils.data.Subset(dataset_zipped, test_indices)
+            
+        fold_train_dataset = torch.utils.data.Subset(dataset, train_indices)
+        fold_val_dataset = torch.utils.data.Subset(dataset, test_indices)
         
         train_data_loader = torch.utils.data.DataLoader(fold_train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
         val_data_loader = torch.utils.data.DataLoader(fold_val_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
@@ -157,16 +143,21 @@ def collect_data_2D_lstm(data_path , transform, device, output_var, train_test_s
         print(f'There are: {len(fold_train_dataset)} training samples, {len(fold_val_dataset)} validation samples and {len(fold_val_dataset)} test samples')
         print(f'start: {start}, end: {end}, len_dataset: {len_dataset}')
         print(f'Ther are: {len(train_data_loader)*batch_size} training samples, {len(val_data_loader)*batch_size} validation samples and {len(test_data_loader)*batch_size} test samples')
-    
-    else:
+
+    else :
+
+        train_dataset, test_dataset = torch.utils.data.random_split(dataset, [len(dataset) - int(len(dataset)*train_test_split), int(len(dataset)*train_test_split)])
         
+        train_dataset, val_dataset = torch.utils.data.random_split(train_dataset, [len(train_dataset) - int(len(train_dataset)*train_val_split), int(len(train_dataset)*train_val_split)])
+    
+        print(f'Ther are: {len(train_dataset)} training samples, {len(val_dataset)} validation samples and {len(test_dataset)} test samples')
+
+        # create dataloaders
         train_data_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
         val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
         test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
 
-    return train_data_loader, val_data_loader, test_data_loader, output_var_idx
-
-
+    return train_data_loader, val_data_loader, test_data_loader
 
 
 
@@ -233,19 +224,30 @@ def train_model(test_name, train_bool,
             print (summary(model, (1, num_input_channels, 168)))
 
 
-    elif (dim == '2D') or (dim == '2D_LSTM') or ('2D_ViT' in dim):
+    elif (dim == '2D') or (dim.startswith('2D_LSTM')) or ('2D_ViT' in dim):
         model = torchvision.models.resnet18(pretrained=True, progress=True)
 
         num_input_channels = len(variables_to_use)  # Number of stacked images in input 
 
         model = StackedResNet(num_input_channels, num_output_features=num_output_features, resnet=model)
 
-        if (dim == '2D_LSTM'):
-            # freeze stacked resnet
-            for param in model.parameters():
-                param.requires_grad = False
+        if (dim == '2D_LSTM_SR'):
 
-            model = LSTMForecaster(model, channels=num_input_channels, num_layers=2, hidden_size=512, outputs=1, mode='option1')
+            if(pretrained_flag): model.load_state_dict(torch.load("StackedResnet_24output/best_valRelerr_model.pth"))
+
+            if (freezed_flag):
+                # freeze stacked resnet
+                for param in model.parameters():
+                    param.requires_grad = False
+
+            model = LSTMSRForecaster(
+                stacked_resnet=model,
+                outputs=num_output_features,
+                channels=num_input_channels,
+                num_layers=2,
+                hidden_size=512,
+                bidirectional=True,
+            )
 
         elif (dim == '2D_ViT_im' or dim == '2D_ViT_parallel_SR' or dim == '2D_ViT_SR_feat_in'):
             
@@ -291,50 +293,37 @@ def train_model(test_name, train_bool,
             # Training Phase
 
             model.train()
-            if dim == '2D_LSTM':
+            # avoid dropout etc. on freezed parts of the model
+            if freezed_flag:
                 model.stacked_resnet.eval()
 
             train_loss = 0
             train_rel_err = 0
 
             for i, (images, labels) in enumerate(train_loader):
-
-
-                # if dim == '2D_LSTM':
-                #     images, signals = images
-                #     cwt = signal.cwt(signals, ricker
-                #                 , np.arange(1, 127))
-                #     if not torch.all(cwt == images):
-                #         print("CWT and images are different")
-                #         raise Exception()
-
-                if dim == '2D_LSTM':
-                    images = (images[0].to(device), images[1].to(device))        
+                if dim == '2D_LSTM_SR':
+                    images = (images[0].to(device), images[1].to(device))
                 else:
                     images = images.to(device)
                 labels = labels.to(device)
 
                 optimizer.zero_grad()
 
-                if dim == '2D_LSTM':
-                    # signals: (N, L, C)
-                    # images: (N, H, W, C)
+                if dim == '2D_LSTM_SR':
+                    # signals: (N, 1, C, L)
+                    # images: (N, C, H, W)
                     signals, images = images
-                    # TODO fix shapes
-                    signals = signals.squeeze().reshape(signals.shape[0], signals.shape[2], signals.shape[1])
-                    #print(signals.shape, images.shape)
+                    # print(f'shape of signals: {signals.shape}, shape of images: {images.shape}')
+                    # signals: (N, L, C)
+                    signals = signals.permute(0, 2, 1)
                     # out: (N, 24)
-                    out = torch.zeros((images.shape[0], 24)).to(device)
-                    for j in range(24):
-                        # out[:, j]: (N, 1)
-                        out[:,j] = model(images, signals)
-                        signals = torch.cat([signals[:, 1:, out_channel_idx], out[:,j].unsqueeze(1)], dim=1)
+                    out = model(images, signals)
                 else:
                     #print (images.shape)
                     out = model(images)
 
-                    
-                if not ( (dim=='2D' or '2D_ViT' in dim) and mode=='forecasting_lstm'):
+                # NOTE this could break shapes
+                if mode != 'forecasting_lstm':
                     out = torch.flatten(out) # era di default, nel caso 2D_24 non serve
 
                 loss = torch.nn.functional.mse_loss(out, labels)
@@ -512,7 +501,7 @@ def main_cross_val(main_f, args):
     
         print("Cross validation iteration", i, "results", ret_arr, "\n\n\n")
 
-    mean_acc, mean_loss = np.mean(ret_arr, axis=0)
+    mean_loss, mean_acc = np.mean(ret_arr, axis=0)
     
     json_dict = {
         "mean_acc" : str(mean_acc),
@@ -665,10 +654,24 @@ def main_2d_lstm(args, cross_validation_idx=-1):
 
     debug = args.do_debug
 
-    device = args.gpu
+    device = None
 
-    device = hardware_check()
+    if torch.cuda.is_available():
 
+        device = ("cuda:"+args.gpu)
+
+        num_devices = torch.cuda.device_count()
+
+        current_device = torch.cuda.current_device()
+
+        device_name = torch.cuda.get_device_name(current_device) 
+
+        print("Device name:", device_name, "Device number:", current_device, "Number of devices:", num_devices)
+    
+    else:
+        device = "cpu"
+
+    print("Actual device: ", device)
 
     os.environ["CUDA_VISIBLE_DEVICES"] = device
  
@@ -695,7 +698,7 @@ def main_2d_lstm(args, cross_validation_idx=-1):
     torch.backends.cudnn.deterministic=True
     
     torch.use_deterministic_algorithms(True, warn_only=True)
-        
+    
     ####### ARGS
 
     system_time = time.localtime()
@@ -706,7 +709,8 @@ def main_2d_lstm(args, cross_validation_idx=-1):
 
     os.makedirs(res_path, exist_ok=True, mode=0o777)
 
-    test_name = f'{args.test_name}_{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_{args.bs}_{args.variables_to_use}'
+
+    test_name = f'{args.dim}_{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_{args.bs}_{args.variables_to_use}'
 
     if cross_validation_idx != -1:
         test_name = f'_cross_val_{cross_validation_idx+1}di{args.cross_val}_' + test_name
@@ -715,6 +719,7 @@ def main_2d_lstm(args, cross_validation_idx=-1):
     test_name = test_name + ("_augmented" if args.augmentation else "")
     test_name = test_name + ("_freezed" if args.freezed else "")
     test_name = test_name + ("_pretrained" if args.pretrained else "" )
+    test_name = test_name + ("_aug_type_"+args.aug_type if args.aug_type else "")
 
     train_bool = not args.do_test
 
@@ -730,6 +735,10 @@ def main_2d_lstm(args, cross_validation_idx=-1):
 
     epoch = 2 if debug else 100
 
+    num_output_features = 24 if args.mode == "forecasting_lstm" else 1
+
+    print("num_output_features", num_output_features)
+
     debug = debug
 
     data_path = "./data"
@@ -744,17 +753,23 @@ def main_2d_lstm(args, cross_validation_idx=-1):
 
     batch_size = args.bs
 
-
-    train_data_loader, val_data_loader, test_data_loader, output_var_idx = collect_data_2D_lstm(data_path=data_path, transform = transform, device = device, output_var= output_var,
-                                                                                                train_test_split=train_test_split, train_val_split=train_val_split, mode=args.mode,
-                                                                                                batch_size=batch_size, variables_to_use=args.variables_to_use, 
-                                                                                                cross_validation_idx=cross_validation_idx,
-                                                                                                cross_val_split = args.cross_val,
-                                                                                                csv_file="AirQuality.csv", augmentation_flag = args.augmentation)
+    train_data_loader, val_data_loader, test_data_loader = collect_data_2D_lstm(
+        data_path=data_path, transform = transform, device = device, 
+        output_var= output_var, train_test_split=train_test_split,
+        train_val_split=train_val_split, mode=args.mode, batch_size=batch_size,
+        variables_to_use=args.variables_to_use,
+        cross_validation_idx=cross_validation_idx,
+        cross_val_split = args.cross_val, augmentation_flag = args.augmentation,
+        aug_type=args.aug_type, include_signals=args.dim == '2D_LSTM_SR'
+    )
 
     # Train model
-
-    return train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use, out_channel_idx=output_var_idx,pretrained_flag=args.pretrained,freezed_flag=args.freezed)
+    return train_model(
+        test_name, train_bool, lr, epoch, train_data_loader, val_data_loader,
+        test_data_loader, res_path, device, args.dim, args.mode, args.transform,
+        trained_net_path, debug, args.variables_to_use, num_output_features=num_output_features,
+        pretrained_flag=args.pretrained, freezed_flag=args.freezed
+    )
 
 
 
@@ -762,7 +777,7 @@ def main_2d_lstm(args, cross_validation_idx=-1):
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('dim', choices=["1D", "2D", "2D_LSTM", "2D_ViT_im", "2D_ViT_parallel_SR", "2D_ViT_SR_feat_in"])
+    parser.add_argument('dim', choices=["1D", "2D", "2D_LSTM_SR", "2D_ViT_im", "2D_ViT_parallel_SR", "2D_ViT_SR_feat_in"])
 
     parser.add_argument('--dataset_path', type=str, required=True)
 
@@ -805,7 +820,7 @@ def main():
         elif args.dim == "2D" or '2D_ViT' in args.dim:
             main_cross_val(main_2d, args)
 
-        elif args.dim == "2D_LSTM":
+        elif args.dim.startswith("2D_LSTM"):
             main_cross_val(main_2d_lstm, args)
 
     else:
@@ -814,7 +829,7 @@ def main():
             main_1d(args)
         elif args.dim == "2D" or '2D_ViT' in args.dim:
             main_2d(args)
-        elif args.dim == "2D_LSTM":
+        elif args.dim.startswith("2D_LSTM"):
             main_2d_lstm(args)
 
     
