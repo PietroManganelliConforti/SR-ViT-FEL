@@ -42,8 +42,9 @@ def collect_data_2D(data_path , transform, device, output_var, train_test_split,
     preprocess = None if not augmentation_flag else CWTAugmentation(aug_type)
     
     dataset = Dataset_2D(data_path=data_path, transform=transform, device=device, output_var=output_var, mode=mode, preprocess=preprocess, variable_to_use=variables_to_use)
-    
+
     len_dataset = len(dataset)
+    mase_denom = dataset.mase_denom
 
     print(f'\nNumero di Training samples: {len_dataset}')
 
@@ -89,7 +90,7 @@ def collect_data_2D(data_path , transform, device, output_var, train_test_split,
         val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
         test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
 
-    return train_data_loader, val_data_loader, test_data_loader
+    return train_data_loader, val_data_loader, test_data_loader, mase_denom
 
 
 
@@ -112,6 +113,7 @@ def collect_data_2D_lstm(data_path , transform, device, output_var, train_test_s
     )
     
     len_dataset = len(dataset)
+    mase_denom = dataset.mase_denom
 
     print(f'\nNumero di Training samples: {len_dataset}')
 
@@ -157,14 +159,15 @@ def collect_data_2D_lstm(data_path , transform, device, output_var, train_test_s
         val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
         test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
 
-    return train_data_loader, val_data_loader, test_data_loader
+    return train_data_loader, val_data_loader, test_data_loader, mase_denom
 
 
 
 def collect_data_1D(data_path, csv_file, device, train_test_split, train_val_split, output_var, mode, batch_size, variables_to_use): 
 
     dataset = Dataset_1D_raw(data_path, csv_file=csv_file, device=device, output_var=output_var, mode=mode, variables_to_use=variables_to_use)
-                                                                 
+    mase_denom = dataset.mase_denom
+
     print(f'\nNumero di Training samples: {len(dataset)}')
 
     train_dataset, test_dataset = torch.utils.data.random_split(dataset, [len(dataset) - int(len(dataset)*train_test_split), int(len(dataset)*train_test_split)])
@@ -178,7 +181,7 @@ def collect_data_1D(data_path, csv_file, device, train_test_split, train_val_spl
     val_data_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
     test_data_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
 
-    return train_data_loader, val_data_loader, test_data_loader
+    return train_data_loader, val_data_loader, test_data_loader, mase_denom
 
 
 
@@ -189,7 +192,8 @@ def train_model(test_name, train_bool,
                  val_loader, test_loader,
                  res_path, device, dim, mode, transform, trained_net_path= "",
                  debug = False, variables_to_use=None, out_channel_idx=None,
-                 num_output_features=1,pretrained_flag = False, freezed_flag = False):
+                 num_output_features=1,pretrained_flag = False, freezed_flag = False,
+                 mase_denom = None):
 
     
     print('TRAIN_MODEL\n\n')
@@ -207,6 +211,7 @@ def train_model(test_name, train_bool,
     torch.cuda.empty_cache()
 
     best_val_loss, best_val_rel_err = float('inf'), float('inf')
+    best_val_mase = float('inf')
 
     # Build model
 
@@ -279,6 +284,11 @@ def train_model(test_name, train_bool,
             "rel_err_train":[],
             "rel_err_eval":[],
             "rel_err_test":[]   
+        },
+        "mase" : {
+            "mase_train":[],
+            "mase_eval":[],
+            "mase_test":[]   
         }
     }
     
@@ -299,6 +309,7 @@ def train_model(test_name, train_bool,
 
             train_loss = 0
             train_rel_err = 0
+            train_mase = 0
 
             for i, (images, labels) in enumerate(train_loader):
                 if dim == '2D_LSTM_SR':
@@ -333,22 +344,27 @@ def train_model(test_name, train_bool,
 
                 rel_err = ((out - labels) / labels).abs().mean()
                 train_rel_err += rel_err.item()
+                
+                mase = mase_numerator(out, labels) / mase_denom
+                train_mase += mase.item()
 
 
             ret_dict["losses"]["loss_train"].append(train_loss/len(train_loader)) 
-            ret_dict["rel_err"]["rel_err_train"].append(train_rel_err/len(train_loader)) 
+            ret_dict["rel_err"]["rel_err_train"].append(train_rel_err/len(train_loader))
+            ret_dict["mase"]["mase_train"].append(train_mase/len(train_loader))
 
             # Validation phase
             model.eval()
             
             with torch.no_grad():
 
-                val_loss, val_rel_err = evaluate_model(model, val_loader,device, dim, mode) 
+                val_loss, val_rel_err, val_mase = evaluate_model(model, val_loader,device, dim, mode, mase_denom) 
 
                 ret_dict["losses"]["loss_eval"].append(val_loss) 
-                ret_dict["rel_err"]["rel_err_eval"].append(val_rel_err) 
+                ret_dict["rel_err"]["rel_err_eval"].append(val_rel_err)
+                ret_dict["mase"]["mase_eval"].append(val_mase)
             
-            print("[EPOCH "+str(epoch)+"]","Val_loss: ", val_loss, ",  Val_rel_err: ", val_rel_err)
+            print("[EPOCH "+str(epoch)+"]","Val_loss: ", val_loss, ",  Val_rel_err: ", val_rel_err, ",  Val_mase: ", val_mase)
 
             save_after_n_epochs = 0 if debug else 15
 
@@ -368,6 +384,14 @@ def train_model(test_name, train_bool,
                 best_val_rel_err = val_rel_err
                 print('Saving best val_rel_err model at epoch: ',epoch," with rel err: ",val_rel_err)
 
+            if epoch > save_after_n_epochs and val_mase < best_val_mase:
+
+                torch.save(model.state_dict(), save_path + 'best_valMase_model.pth')
+                torch.save(optimizer.state_dict(), save_path + 'state_dict_optimizer.op')
+                
+                best_val_mase = val_mase
+                print('Saving best val_mase model at epoch: ',epoch," with mase: ",val_mase)
+
             if epoch % 50 == 0:
 
                 save_plots_and_report(ret_dict, save_path, test_name, False)
@@ -382,12 +406,13 @@ def train_model(test_name, train_bool,
     model.eval()
     
     with torch.no_grad():
-        test_loss, test_rel_err = evaluate_model(model, test_loader,device, dim, mode) 
+        test_loss, test_rel_err, test_mase = evaluate_model(model, test_loader,device, dim, mode, mase_denom) 
 
     ret_dict["losses"]["loss_test"].append(test_loss) #a point
     ret_dict["rel_err"]["rel_err_test"].append(test_rel_err) #a point
+    ret_dict["mase"]["mase_test"].append(test_mase) #a point
 
-    print("[TEST] ","test_loss", test_loss, "test_rel_err", test_rel_err)
+    print("[TEST] ","test_loss", test_loss, "test_rel_err", test_rel_err, "test_mase", test_mase)
 
     
     print('\n#----------------------#\n#   Process Completed  #\n#----------------------#\n\n')
@@ -395,7 +420,7 @@ def train_model(test_name, train_bool,
 
     save_plots_and_report(ret_dict, save_path, test_name, False)
 
-    return (ret_dict["losses"]["loss_test"], ret_dict["rel_err"]["rel_err_test"]), save_path
+    return (ret_dict["losses"]["loss_test"], ret_dict["rel_err"]["rel_err_test"], ret_dict["mase"]["mase_test"]), save_path
 
 
 
@@ -475,11 +500,11 @@ def main_1d(args, cross_validation_idx=-1):
 
     trained_net_path = ""
 
-    train_data_loader, val_data_loader, test_data_loader = collect_data_1D(data_path=args.dataset_path, csv_file="AirQuality.csv", device = device, train_test_split=train_test_split, train_val_split=train_val_split, output_var=args.output_var, mode=args.mode, batch_size=args.bs, variables_to_use=args.variables_to_use)
+    train_data_loader, val_data_loader, test_data_loader, mase_denom = collect_data_1D(data_path=args.dataset_path, csv_file="AirQuality.csv", device = device, train_test_split=train_test_split, train_val_split=train_val_split, output_var=args.output_var, mode=args.mode, batch_size=args.bs, variables_to_use=args.variables_to_use)
 
     # Train model
 
-    return train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use,pretrained_flag=args.pretrained,freezed_flag=args.freezed)
+    return train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use,pretrained_flag=args.pretrained,freezed_flag=args.freezed, mase_denom = mase_denom)
 
 
 
@@ -501,11 +526,12 @@ def main_cross_val(main_f, args):
     
         print("Cross validation iteration", i, "results", ret_arr, "\n\n\n")
 
-    mean_loss, mean_acc = np.mean(ret_arr, axis=0)
+    mean_loss, mean_acc, mean_mase = np.mean(ret_arr, axis=0)
     
     json_dict = {
         "mean_acc" : str(mean_acc),
         "mean_loss" : str(mean_loss),
+        "mean_mase" : str(mean_mase),
         "args" : str(args),
         "paths" :str( paths),
         "ret_arr" : str(ret_arr)
@@ -516,11 +542,11 @@ def main_cross_val(main_f, args):
 
     import csv
 
-    #open return_of_everything and write the results mean_acc, mean_loss, args, paths, ret_arr
+    #open return_of_everything and write the results mean_acc, mean_loss, mean_mase, args, paths, ret_arr
 
     with open("return_of_everything.csv", 'a') as f:
         writer = csv.writer(f)
-        writer.writerow([mean_acc, mean_loss, args.dim, args.augmentation, args.pretrained, args.freezed, ret_arr, paths[-1] ])
+        writer.writerow([mean_acc, mean_loss, mean_mase, args.dim, args.augmentation, args.pretrained, args.freezed, ret_arr, paths[-1] ])
         f.close()
 
 
@@ -632,7 +658,7 @@ def main_2d(args, cross_validation_idx=-1):
 
     batch_size = args.bs
 
-    train_data_loader, val_data_loader, test_data_loader = collect_data_2D(data_path=data_path, transform = transform, device = device, 
+    train_data_loader, val_data_loader, test_data_loader, mase_denom = collect_data_2D(data_path=data_path, transform = transform, device = device, 
                                                                            output_var= output_var, train_test_split=train_test_split,
                                                                             train_val_split=train_val_split, mode=args.mode, batch_size=batch_size,
                                                                             variables_to_use=args.variables_to_use,
@@ -644,7 +670,7 @@ def main_2d(args, cross_validation_idx=-1):
 
 
 
-    return train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use, num_output_features=num_output_features,pretrained_flag=args.pretrained,freezed_flag=args.freezed)
+    return train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use, num_output_features=num_output_features,pretrained_flag=args.pretrained,freezed_flag=args.freezed, mase_denom = mase_denom)
 
 
 
@@ -753,7 +779,7 @@ def main_2d_lstm(args, cross_validation_idx=-1):
 
     batch_size = args.bs
 
-    train_data_loader, val_data_loader, test_data_loader = collect_data_2D_lstm(
+    train_data_loader, val_data_loader, test_data_loader, mase_denom = collect_data_2D_lstm(
         data_path=data_path, transform = transform, device = device, 
         output_var= output_var, train_test_split=train_test_split,
         train_val_split=train_val_split, mode=args.mode, batch_size=batch_size,
@@ -768,7 +794,7 @@ def main_2d_lstm(args, cross_validation_idx=-1):
         test_name, train_bool, lr, epoch, train_data_loader, val_data_loader,
         test_data_loader, res_path, device, args.dim, args.mode, args.transform,
         trained_net_path, debug, args.variables_to_use, num_output_features=num_output_features,
-        pretrained_flag=args.pretrained, freezed_flag=args.freezed
+        pretrained_flag=args.pretrained, freezed_flag=args.freezed, mase_denom = mase_denom,
     )
 
 

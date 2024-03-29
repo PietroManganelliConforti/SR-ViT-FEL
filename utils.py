@@ -13,11 +13,18 @@ def hardware_check():
     return device
 
 
+def mase_numerator(pred: torch.Tensor, labels: torch.Tensor):
+    return (pred - labels).abs().sum()
 
-def evaluate_model(model, loader,device, dim, mode):
+def mase_denominator(labels: torch.Tensor):
+    return (labels - labels.mean()).abs().sum()
+
+
+def evaluate_model(model, loader,device, dim, mode, mase_denom):
 
     loss = 0
     rel_err = 0
+    mase = 0
 
     for images, labels in loader:
         if dim == '2D_LSTM_SR':
@@ -43,8 +50,9 @@ def evaluate_model(model, loader,device, dim, mode):
             out = torch.flatten(out)
         loss += torch.nn.functional.mse_loss(out, labels)
         rel_err += ((out - labels) / labels).abs().mean()
+        mase += (mase_numerator(out, labels) / mase_denom).mean()
 
-    return (loss/len(loader)).item(), (rel_err/len(loader)).item()
+    return (loss/len(loader)).item(), (rel_err/len(loader)).item(), (mase/len(loader)).item()
 
 
 

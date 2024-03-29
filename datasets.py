@@ -5,6 +5,8 @@ import numpy as np
 import pandas as pd
 from natsort import natsorted
 
+from utils import mase_denominator
+
 
 class Dataset_1D(torch.utils.data.Dataset):
 
@@ -367,6 +369,10 @@ class Dataset_2D(torch.utils.data.Dataset):
                 signals += [np.load(signal_file)]
             # (N_WINDOWS, N_CHANNELS, WINDOW_SIZE)
             self.signals = torch.tensor(np.array(signals), dtype=torch.float32).permute(1,0,2)
+            # Simply flattening the labels should work even if we are
+            # predicting 24 values after each (possibly not adjacent)
+            # window.
+            self.mase_denom = mase_denominator(self.labels.flatten())
 
 
 
