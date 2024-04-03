@@ -304,9 +304,8 @@ def train_model(test_name, train_bool,
 
             model.train()
             # avoid dropout etc. on freezed parts of the model
-            if freezed_flag and dim in ['2D', '2D_ViT_im']:
-                model.eval()
-            elif freezed_flag:
+            if freezed_flag:
+                assert(dim in ["2D_LSTM_SR","2D_ViT_parallel_SR", "2D_ViT_SR_feat_in"])  
                 model.stacked_resnet.eval()
 
             train_loss = 0
