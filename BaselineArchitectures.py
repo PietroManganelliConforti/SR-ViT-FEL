@@ -188,3 +188,55 @@ class LSTMLinear(nn.Module):
         x = self.linear2(x)
         
         return x
+    
+    
+
+class LSTMForecaster(nn.Module):
+
+    def __init__(
+        self,
+        outputs,
+        channels,
+        num_layers,
+        hidden_size,
+        bidirectional,
+        mode='option1'
+    ) -> None:
+        super().__init__()
+
+        assert mode in ['option1']
+
+        input_size = channels
+        print(f'channels: {channels},input_size: {input_size}, outputs: {outputs}')
+        self.lstm = nn.LSTM(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=True,
+            bidirectional=bidirectional
+        )
+
+        self.relu = nn.ReLU()
+        self.fc1 = nn.Linear((2 if bidirectional else 1)*hidden_size, hidden_size // 2)
+        self.fc2 = nn.Linear(hidden_size // 2, outputs)
+
+    # x_img: (N, C, H, W)
+    # x_signal: (N, L, C)
+    # -> (N, Y)
+    def forward(self, x_signal):
+        # print(f'Shapes: x_img: {x_img.shape}, x_sig: {x_signal.shape}')
+        L = x_signal.shape[1]
+        
+        x_lstm = x_signal
+        
+        # (N, L, H)
+        y_lstm, _ = self.lstm(x_lstm)
+        # (N, H)
+        y_lstm = y_lstm[:, -1, :].squeeze()
+        # (N, H/2)
+        y_fc1 = self.relu(self.fc1(y_lstm))
+        # (N, Y)
+        y_fc2 = self.relu(self.fc2(y_fc1))
+
+        return y_fc2
+    

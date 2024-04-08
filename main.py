@@ -12,7 +12,7 @@ import pandas as pd
 from natsort import natsorted
 import cv2
 from StackedResnet import StackedResNet, LSTMSRForecaster, ViTForecaster
-from BaselineArchitectures import Stacked2DLinear, Stacked1DLinear, LSTMLinear
+from BaselineArchitectures import Stacked2DLinear, Stacked1DLinear, LSTMLinear, LSTMForecaster
 from torchsummary import summary
 import time
 from datasets import *
@@ -229,7 +229,7 @@ def train_model(test_name, train_bool,
             print (summary(model, (1, num_input_channels, 168)))
 
 
-    elif (dim == '2D') or (dim.startswith('2D_LSTM')) or ('2D_ViT' in dim):
+    elif (dim == '2D') or (dim.startswith('2D_LSTM')) or ('2D_ViT' in dim) or (dim == "1D_LSTM_24"):
         model = torchvision.models.resnet18(pretrained=True, progress=True)
 
         num_input_channels = len(variables_to_use)  # Number of stacked images in input 
@@ -265,7 +265,16 @@ def train_model(test_name, train_bool,
 
             model = ViTForecaster(model, dim, outputs=24)
 
+        elif (dim == "1D_LSTM_24"):
+                model = LSTMForecaster(
+                outputs=num_output_features,
+                channels=num_input_channels,
+                num_layers=2,
+                hidden_size=512,
+                bidirectional=True,
+            )
 
+            
     model = model.to(device)
 
 
@@ -313,7 +322,7 @@ def train_model(test_name, train_bool,
             train_mase = 0
 
             for i, (images, labels) in enumerate(train_loader):
-                if dim == '2D_LSTM_SR':
+                if dim == '2D_LSTM_SR' or dim == '1D_LSTM_24':
                     images = (images[0].to(device), images[1].to(device))
                 else:
                     images = images.to(device)
@@ -330,6 +339,11 @@ def train_model(test_name, train_bool,
                     signals = signals.permute(0, 2, 1)
                     # out: (N, 24)
                     out = model(images, signals)
+                elif dim == '1D_LSTM_24':
+                    signals, _ = images
+                    signals = signals.permute(0, 2, 1)
+                    # out: (N, 24)
+                    out = model(signals)
                 else:
                     #print (images.shape)
                     out = model(images)
@@ -787,7 +801,7 @@ def main_2d_lstm(args, cross_validation_idx=-1):
         variables_to_use=args.variables_to_use,
         cross_validation_idx=cross_validation_idx,
         cross_val_split = args.cross_val, augmentation_flag = args.augmentation,
-        aug_type=args.aug_type, include_signals=args.dim == '2D_LSTM_SR'
+        aug_type=args.aug_type, include_signals=(args.dim == '2D_LSTM_SR' or args.dim == '1D_LSTM_24')
     )
 
     # Train model
@@ -804,7 +818,7 @@ def main_2d_lstm(args, cross_validation_idx=-1):
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('dim', choices=["1D", "2D", "2D_LSTM_SR", "2D_ViT_im", "2D_ViT_parallel_SR", "2D_ViT_SR_feat_in"])
+    parser.add_argument('dim', choices=["1D","1D_LSTM_24", "2D", "2D_LSTM_SR", "2D_ViT_im", "2D_ViT_parallel_SR", "2D_ViT_SR_feat_in"])
 
     parser.add_argument('--dataset_path', type=str, required=True)
 
@@ -847,7 +861,7 @@ def main():
         elif args.dim == "2D" or '2D_ViT' in args.dim:
             main_cross_val(main_2d, args)
 
-        elif args.dim.startswith("2D_LSTM"):
+        elif args.dim.startswith("2D_LSTM") or args.dim=="1D_LSTM_24":
             main_cross_val(main_2d_lstm, args)
 
     else:
@@ -856,7 +870,7 @@ def main():
             main_1d(args)
         elif args.dim == "2D" or '2D_ViT' in args.dim:
             main_2d(args)
-        elif args.dim.startswith("2D_LSTM"):
+        elif args.dim.startswith("2D_LSTM") or args.dim=="1D_LSTM_24":
             main_2d_lstm(args)
 
     

@@ -27,7 +27,7 @@ def evaluate_model(model, loader,device, dim, mode, mase_denom):
     mase = 0
 
     for images, labels in loader:
-        if dim == '2D_LSTM_SR':
+        if dim == '2D_LSTM_SR' or '1D_LSTM_24':
             images = (images[0].to(device), images[1].to(device))
         else:
             images = images.to(device)
@@ -42,6 +42,13 @@ def evaluate_model(model, loader,device, dim, mode, mase_denom):
             signals = signals.permute(0, 2, 1)
             # out: (N, 24)
             out = model(images, signals)
+        elif dim =='1D_LSTM_24':
+            signals, _ = images
+            # print(f'shape of signals: {signals.shape}, shape of images: {images.shape}')
+            # signals: (N, L, C)
+            signals = signals.permute(0, 2, 1)
+            # out: (N, 24)
+            out = model(signals)
         else:
             out = model(images)
 
