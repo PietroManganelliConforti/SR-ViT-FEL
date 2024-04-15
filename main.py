@@ -200,7 +200,7 @@ def train_model(test_name, train_bool,
 
     # Path
 
-    save_path = res_path + '/' + test_name + '/'
+    save_path = res_path + '/' + test_name + '/' if (train_bool) else test_name + "/"
 
     if not os.path.exists(save_path):
         os.makedirs(save_path, mode=0o777)
@@ -432,8 +432,10 @@ def train_model(test_name, train_bool,
     
     print('\n#----------------------#\n#   Process Completed  #\n#----------------------#\n\n')
 
-
-    save_plots_and_report(ret_dict, save_path, test_name, False)
+    if (train_bool):
+        save_plots_and_report(ret_dict, save_path, test_name, False)
+    else:
+        save_plots_and_report(ret_dict, save_path, "test_result", False)
 
     return (ret_dict["losses"]["loss_test"], ret_dict["rel_err"]["rel_err_test"], ret_dict["mase"]["mase_test"]), save_path
 
@@ -501,8 +503,12 @@ def main_1d(args, cross_validation_idx=-1):
 
     train_bool = not args.do_test
 
-    print("train_bool",train_bool)
-
+    print("train_bool", train_bool)
+    
+    if (not train_bool):
+        assert args.test_name != ""
+        test_name = f"{args.test_name}/{test_name}"
+    
     train_val_split = 0.1
 
     train_test_split = 0.2
@@ -620,6 +626,10 @@ def main_2d(args, cross_validation_idx=-1):
     torch.use_deterministic_algorithms(True, warn_only=True)
     
     ####### ARGS
+        
+    if cross_validation_idx != -1:
+        test_name = f'_cross_val_{cross_validation_idx+1}di{args.cross_val}_' + test_name
+            
 
     system_time = time.localtime()
 
@@ -632,9 +642,6 @@ def main_2d(args, cross_validation_idx=-1):
 
     test_name = f'{args.dim}_{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_{args.bs}_{args.variables_to_use}'
 
-    if cross_validation_idx != -1:
-        test_name = f'_cross_val_{cross_validation_idx+1}di{args.cross_val}_' + test_name
-    
 
     test_name = test_name + ("_augmented" if args.augmentation else "")
     test_name = test_name + ("_freezed" if args.freezed else "")
@@ -643,8 +650,12 @@ def main_2d(args, cross_validation_idx=-1):
 
     train_bool = not args.do_test
 
-    print("train_bool",train_bool)
-
+    print("train_bool", train_bool)
+    
+    if (not train_bool):
+        assert args.test_name != ""
+        test_name = f"{args.test_name}/{test_name}"
+        
     input_shape = (3, 362, 512)
 
     train_val_split = 0.1
@@ -764,8 +775,12 @@ def main_2d_lstm(args, cross_validation_idx=-1):
 
     train_bool = not args.do_test
 
-    print("train_bool",train_bool)
-
+    print("train_bool", train_bool)
+    
+    if (not train_bool):
+        assert args.test_name != ""
+        test_name = f"{args.test_name}/{test_name}"
+    
     input_shape = (3, 362, 512)
 
     train_val_split = 0.1
