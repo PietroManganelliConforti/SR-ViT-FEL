@@ -21,13 +21,13 @@ def mase_denominator(labels: torch.Tensor):
 
 
 def evaluate_model(model, loader,device, dim, mode, mase_denom):
-
     loss = 0
     rel_err = 0
     mase = 0
 
     for images, labels in loader:
-        if dim == '2D_LSTM_SR' or '1D_LSTM_24':
+
+        if dim == '2D_LSTM_SR' or dim == '1D_LSTM_24':
             images = (images[0].to(device), images[1].to(device))
         else:
             images = images.to(device)
