@@ -421,6 +421,7 @@ def train_model(test_name, train_bool,
     model.eval()
     
     with torch.no_grad():
+        
         test_loss, test_rel_err, test_mase = evaluate_model(model, test_loader,device, dim, mode, mase_denom) 
 
     ret_dict["losses"]["loss_test"].append(test_loss) #a point
@@ -626,10 +627,7 @@ def main_2d(args, cross_validation_idx=-1):
     torch.use_deterministic_algorithms(True, warn_only=True)
     
     ####### ARGS
-        
-    if cross_validation_idx != -1:
-        test_name = f'_cross_val_{cross_validation_idx+1}di{args.cross_val}_' + test_name
-            
+
 
     system_time = time.localtime()
 
@@ -641,6 +639,11 @@ def main_2d(args, cross_validation_idx=-1):
 
 
     test_name = f'{args.dim}_{args.dataset_path.split("/")[-1]}_{args.mode}_{args.output_var}_{args.transform}_{args.bs}_{args.variables_to_use}'
+
+
+    if cross_validation_idx != -1:
+        test_name = f'_cross_val_{cross_validation_idx+1}di{args.cross_val}_' + test_name
+            
 
 
     test_name = test_name + ("_augmented" if args.augmentation else "")
@@ -693,7 +696,6 @@ def main_2d(args, cross_validation_idx=-1):
                                                                             aug_type=args.aug_type)
 
     # Train model
-
 
 
     return train_model(test_name, train_bool, lr, epoch, train_data_loader, val_data_loader, test_data_loader, res_path, device, args.dim, args.mode, args.transform, trained_net_path, debug, args.variables_to_use, num_output_features=num_output_features,pretrained_flag=args.pretrained,freezed_flag=args.freezed, mase_denom = mase_denom)
