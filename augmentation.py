@@ -64,6 +64,25 @@ class CWTAugmentation:
             for i in range(cwt_image.size(0)):   
                 cwt_image[i] = self.adjust_brightness_contrast(cwt_image[i].unsqueeze(0), brightness_factor, contrast_factor).squeeze(0)
         
+        elif self.aug_type == 'brightness_contrast2':
+            
+            brightness_range = (0.7, 1.3)
+            contrast_range = (0.7, 1.3)
+            brightness_factor = np.random.uniform( *brightness_range)
+            contrast_factor = np.random.uniform( *contrast_range)
+            for i in range(cwt_image.size(0)):   
+                cwt_image[i] = self.adjust_brightness_contrast(cwt_image[i].unsqueeze(0), brightness_factor, contrast_factor).squeeze(0)
+        
+        elif self.aug_type == 'brightness_contrast3':
+            brightness_range = (0.9, 1.1)
+            contrast_range = (0.9, 1.1)
+
+
+            brightness_factor = np.random.uniform( *brightness_range)
+            contrast_factor = np.random.uniform( *contrast_range)
+            for i in range(cwt_image.size(0)):   
+                cwt_image[i] = self.adjust_brightness_contrast(cwt_image[i].unsqueeze(0), brightness_factor, contrast_factor).squeeze(0)
+        
         elif self.aug_type == 'noise1':
             # Add Gaussian noise
             cwt_image = self.add_noise(cwt_image,0.05)
@@ -75,10 +94,17 @@ class CWTAugmentation:
         elif self.aug_type == 'noise3':
             # Add Gaussian noise
             cwt_image = self.add_noise(cwt_image,0.001)
-
-        # Elastic transformations
-        #cwt_image = self.elastic_transform(cwt_image)
         
+        elif self.aug_type == 'noise4':
+            # Add Gaussian noise
+            cwt_image = self.add_noise(cwt_image,0.1)
+
+        elif self.aug_type == 'noise1_andbright':
+
+            for i in range(cwt_image.size(0)):   
+                cwt_image[i] = self.adjust_brightness_contrast(cwt_image[i].unsqueeze(0), brightness_factor, contrast_factor).squeeze(0)
+            cwt_image = self.add_noise(cwt_image,0.05)
+
         return cwt_image
 
 
@@ -92,7 +118,22 @@ class CWTAugmentation:
         return transforms.functional.affine(image, angle=0, translate=translation, scale=1, shear=0)
 
     def zoom(self, image, zoom_factor):
-        return transforms.functional.affine(image, angle=0, translate=(0, 0), scale=zoom_factor, shear=0)
+        h, w = image.shape[-2:]
+        new_h, new_w = int(h * zoom_factor), int(w * zoom_factor)
+        image = transforms.functional.resize(image, (new_h, new_w))
+
+        if zoom_factor < 1.0:
+            padding_top = (h - new_h) // 2
+            padding_bottom = h - new_h - padding_top
+            padding_left = (w - new_w) // 2
+            padding_right = w - new_w - padding_left
+            image = transforms.functional.pad(image, (padding_left, padding_top, padding_right, padding_bottom))
+        else:
+            start_x = (new_w - w) // 2
+            start_y = (new_h - h) // 2
+            image = image[..., start_y:start_y + h, start_x:start_x + w]
+
+        return image
 
     def adjust_brightness_contrast(self, image, brightness_factor, contrast_factor):
         return transforms.functional.adjust_brightness(transforms.functional.adjust_contrast(image, contrast_factor),
